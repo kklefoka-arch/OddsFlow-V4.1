@@ -16,6 +16,7 @@ from fastapi import APIRouter, Query
 
 from app.api.routes_picks import settle_pick
 from app.db.database import get_conn
+from app.engine.classify import zone_of
 from app.settings import settings
 
 router = APIRouter(tags=["results"])
@@ -137,7 +138,7 @@ def get_results(
                    COALESCE(f.home_team_name, th.name) AS home_team_name,
                    COALESCE(f.away_team_name, ta.name) AS away_team_name,
                    f.home_score, f.away_score, f.total_goals,
-                   f.draw_zone, f.df_level, f.bts_pocket, f.tier,
+                   f.draw_zone, f.draw_odd, f.df_level, f.bts_pocket, f.tier,
                    fs.home_corners, fs.away_corners, fs.total_corners,
                    lg.name AS league_name, lg.country,
                    em.pick_uuid, em.market, em.pick, em.pick_odd AS emit_odd,
@@ -181,7 +182,7 @@ def get_results(
                 "league":        r["league_name"],
                 "country":       r["country"],
                 "tier":          r["tier"],
-                "draw_zone":     r["draw_zone"],
+                "draw_zone":     r["draw_zone"] or zone_of(r["draw_odd"]),
                 "df":            r["df_level"],
                 "bts_pocket":    r["bts_pocket"],
                 "picks":         [],

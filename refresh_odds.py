@@ -28,6 +28,22 @@ BASE  = "https://api.sportmonks.com/v3/football"
 HORIZON_HOURS = 30   # v4 no-stale-odds: refresh every fixture within ~30h of KO
 
 
+# Inline classification helpers — must stay in sync with app/engine/classify.py
+# (v4 zone boundaries: 2.90/3.30/3.80/4.30). Duplicated here because this script
+# runs standalone from cron without app/ on sys.path.
+def _zone(d):
+    if d is None: return None
+    if d < 2.90:  return "both_sided"
+    if d < 3.30:  return "strong"
+    if d < 3.80:  return "standard"
+    if d < 4.30:  return "low"
+    return "one_sided"
+
+def _bts(yes, no):
+    if yes is None or no is None: return None
+    return "over" if yes <= no else "under"
+
+
 def api_get(path: str, params: dict, retries: int = 3) -> dict:
     params["api_token"] = TOKEN
     url = f"{BASE}/{path}?{urllib.parse.urlencode(params)}"
@@ -133,6 +149,10 @@ for i in range(0, len(sm_ids), 50):
             continue
         (ho, do, ao, by, bn,
          g15, g25, g35, c85) = extract_odds(fx.get("odds") or [])
+        # Reclassify draw_zone/bts_pocket so stored cell stays current after
+        # intraday odds movements. CASE guard prevents NULL overwriting a valid value.
+        new_zone = _zone(do)
+        new_bts  = _bts(by, bn)
         conn.execute("""
             UPDATE fixtures SET
               home_odd       = COALESCE(?, home_odd),
@@ -144,12 +164,15 @@ for i in range(0, len(sm_ids), 50):
               goals_over_25_odd  = COALESCE(?, goals_over_25_odd),
               goals_over_35_odd  = COALESCE(?, goals_over_35_odd),
               corners_over_85_odd = COALESCE(?, corners_over_85_odd),
+              draw_zone  = CASE WHEN ? IS NOT NULL THEN ? ELSE draw_zone END,
+              bts_pocket = CASE WHEN ? IS NOT NULL THEN ? ELSE bts_pocket END,
               updated_at = ?,
               odds_updated_at = ?,
               raw_odds_json = ?
             WHERE id = ?
-        """, (ho, do, ao, by, bn, g15, g25, g35, c85, now_ts, now_ts,
-              json.dumps(fx.get("odds") or []), db_id))
+        """, (ho, do, ao, by, bn, g15, g25, g35, c85,
+              new_zone, new_zone, new_bts, new_bts,
+              now_ts, now_ts, json.dumps(fx.get("odds") or []), db_id))
         if conn.total_changes > 0:
             updated += 1
     time.sleep(0.4)

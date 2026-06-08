@@ -1,11 +1,11 @@
 # Current Status — OddsFlow V4
 
 Update this file at the end of every session.
-Last updated: 2026-05-28 (Session 19 — V3 restoration + raw-notes zone overlay)
+Last updated: 2026-06-08 (Session — full pipeline audit + holistic fixes)
 
 ---
 
-## State: Running ✅ — V3 restored
+## State: Running ✅ — v4 policy live, all endpoints verified
 
 | Item | Detail |
 |------|--------|
@@ -14,15 +14,13 @@ Last updated: 2026-05-28 (Session 19 — V3 restoration + raw-notes zone overlay
 | ngrok | https://steadier-legwarmer-finlike.ngrok-free.dev |
 | DB | `data/oddsflow_v4.db` |
 | GitHub | `github.com/kklefoka-arch/OddsFlowV4` |
-| Active policy | **V3 + Golden Rule + strong-BTS expansion (Session 19+)** — `static_policy.V3_ACTIVE`, 12 cells, 2-key. 27 emit channels (2/cell strong+low+one_sided, 3/cell standard). |
-| Zone boundaries | strong 2.90–3.30, standard 3.30–3.80, low 3.80–4.30, one_sided ≥4.30 (Session 19 raw-notes overlay) |
-| Fixtures | 51,057 total — 46,905 settled, 4,152 upcoming. draw_zone re-backfilled (8,145 updates). |
-| Fixture stats | 38,574 |
-| Distribution post-overlay | strong 7,789 / standard 13,140 / low 3,982 / one_sided 3,840 / excluded 22,306 |
-| emit_log | 613 rows (pre-restore). New emits will write under the V3 partition; existing rows keep their stored zone for historical fidelity. |
-| pick_results | 275 — 156W / 76L / 43V (non-loss 73.5% over the 7d window prior to restore) |
-| Leagues | 62 in DB (30 subscribed) |
-| DB backup before restore | `data/oddsflow_v4.db.bak.2026-05-28-session19` |
+| Active policy | **v4, 8 cells, 2-key (zone × bts)** — `static_policy.V3_ACTIVE`. Goals NL O1.5 / Corners NL O7.5(strong)·O8.5 / threeway alpha-or-draw. |
+| Zone boundaries | strong 2.90–3.30, standard 3.30–3.80, low 3.80–4.30, one_sided ≥4.30 (v4 overlay) |
+| Fixtures (foundation) | ~29,470 settled in foundation matrix (8 cells, all n≥800) |
+| Leagues active | 29 (USL League Two 797 removed 2026-05-29; Big 5 EU never in set) |
+| Today | 17 fixtures kicking off, 1 promoted (KTP vs Haka, standard:over, Finland Superettan) |
+| emit_log | Growing — new emits write under 2-key partition |
+| Drift | All 8 cells no_data (recent_n < 10) — expected for new v4 system; grows as picks settle |
 
 ## How to start
 
@@ -46,6 +44,31 @@ python settle.py            # write pick_results
 
 ---
 
+## Dead files — flagged for manual deletion
+
+These files are no longer referenced by any route or the SPA. They can be manually deleted from Windows Explorer when convenient. They do not affect operation — they are just stale clutter.
+
+| File | Reason |
+|------|--------|
+| `app/frontend/templates/board.html` | /board route removed |
+| `app/frontend/templates/base.html` | Old multi-page layout, SPA doesn't extend it |
+| `app/frontend/templates/fixtures.html` | Dead page route |
+| `app/frontend/templates/foundation.html` | /foundation HTML route removed; JSON /api/foundation still live |
+| `app/frontend/templates/inspector.html` | Dead page route |
+| `app/frontend/templates/ingest.html` | Dead page route |
+| `app/frontend/templates/picks.html` | Dead page route |
+| `app/frontend/templates/partials/` | All partials are for dead pages |
+| `app/frontend/static/board.css` | Dead |
+| `app/frontend/static/board.js` | Dead |
+| `app/frontend/static/app.js` | Old pre-SPA JS |
+| `app/frontend/static/style.css` | Old pre-SPA CSS |
+| `bluetooth_content_share.html` | Unrelated file |
+| `leagues_no_upcoming.md` | Stale notes |
+| `C:Tempv3.log` | Stale log |
+| `graphify-out/` | Third-party analysis output |
+
+---
+
 ## Known issues / observations
 
 | # | Item | Notes |
@@ -56,14 +79,15 @@ python settle.py            # write pick_results
 | 4 | 96% of upcoming fixtures have no `draw_zone` | Not a bug — most upcoming fixtures don't yet carry a quoted `draw_odd`. Within the 7-day window, ~41% carry odds and classify. |
 | 5 | `LOW_ZONE_SUPPRESS` differs between modules | `static_policy.py = False` (pick firing — low zone active). `promotion.py = True` (foundation matrix display — low cells shown as `MEASURING`). Intentional split. |
 | 6 | `pick_results.outcome` stores string `WIN`/`LOSS`/`VOID` | Float lives in `actual_value`. Filter on `outcome='WIN'` or use `actual_value` — never numeric compare against `outcome`. |
-| 7 | `df_level` columns on fixtures + emit_log are inert | Retained from V3.1 schema (additive). New writes are NULL. Will be dropped only if Durable Rule 1 ever relaxes. |
+| 7 | `df_level` columns on fixtures + emit_log | Retained as metadata. New emits write DF0/DF1/DF2 from classify_fixture. Not a partition axis (Durable Rule 1). |
 
 ---
 
-## Session log
+## Session log (this session)
 
 | Session | Date | Work done |
 |---------|------|-----------|
+| This session | 2026-06-08 | **Full pipeline audit + holistic fixes + documentation cleanup.** Phase A: read all 8 pipeline scripts + 9 route files + settings + SPA template + OPERATOR_MANUAL. Phase C issue catalogue: H1 (fetch_upcoming windows hardcoded to 2026), H2 (refresh_odds no reclassify after odds update), M1-M4 (CLAUDE.md/OPERATOR_MANUAL stale docs). Phase D fixes: (1) fetch_upcoming.py — dynamic `_build_windows()` replaces hardcoded 2026 windows list, auto-rolls into 2027. (2) refresh_odds.py — added `_zone()`/`_bts()` inline helpers + reclassifies draw_zone/bts_pocket in UPDATE after each intraday refresh. Phase E docs: CLAUDE.md key-files table + decisions section updated to v4 reality; OPERATOR_MANUAL hit-rate convention clarified (threeway binary vs legacy dnb non-loss) + webhook 503 note added; routes_upcoming.py confirmed already clean (frozenset removed in prior session). Context docs: all 6 context docs rewritten to reflect v4 accurately (8 cells, binary BTS axis, 3 markets, signals not gates). plan_group1/2/3 archived. |
 | 1–8 | 2026-05-22 → 2026-05-24 | V4 built, SPA + 7 tabs, league fixes, classification + matrix wired |
 | 9 | 2026-05-25 | 8-group fix plan, supersede logic, monthly fetch windows |
 | 10 | 2026-05-25 | V3 policy deployed (9 cells, 4 markets) |

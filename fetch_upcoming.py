@@ -1,18 +1,36 @@
 """Fetch upcoming fixtures + pre-match odds from Sportmonks.
 
-Uses the date-range endpoint which is the correct V3 API approach.
-Filters to only the 3 currently active leagues: PL (8), MLS (779), Ireland (360).
+Uses the date-range endpoint. Fetches all 29 active leagues — see ACTIVE_LEAGUES below.
+Windows are generated dynamically so the script rolls over year boundaries automatically.
 """
 import sqlite3, urllib.request, urllib.parse, json, time
-from datetime import datetime, timezone
+import calendar as _calendar
+from datetime import datetime, timezone, date as _date
 
 # V3.1 (2026-05-28): prefer env override; fall back to literal for legacy.
 import os as _os
 TOKEN  = _os.environ.get("SPORTMONKS_TOKEN", "2AWINN4fYPiQkY2lfHee9TASZubv74uP1RIY4ILY15Mzg4bw5bH2v2SeKGAN")
 DB     = r"C:\OddsFlowV4\data\oddsflow_v4.db"
 
-TODAY     = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-END_DATE  = "2026-12-31"
+TODAY = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _build_windows(today_str: str) -> list:
+    """Generate month-by-month fetch windows from today through 7 months ahead.
+
+    Dynamic so the script works across year boundaries without manual updates.
+    Dense months (Jul–Oct) use max_pages=30 to stay under the 1,000-fixture cap.
+    """
+    DENSE = {7, 8, 9, 10}
+    cur = _date.fromisoformat(today_str)
+    windows = []
+    for _ in range(8):  # today's month + 7 ahead
+        yr, mo = cur.year, cur.month
+        last_day = _calendar.monthrange(yr, mo)[1]
+        month_end = _date(yr, mo, last_day)
+        windows.append((cur.isoformat(), month_end.isoformat(), 30 if mo in DENSE else 20))
+        cur = _date(yr + (1 if mo == 12 else 0), (mo % 12) + 1, 1)
+    return windows
 
 # All 29 subscribed leagues — sportmonks_id: tier.
 # Re-Foundation (2026-05-30) — country-context tiers: T1 = top flight of its
@@ -160,22 +178,9 @@ _league_id_map: dict[int, int] = {
 
 inserted = updated = skipped = 0
 
-# Fetch in monthly windows — keeps each batch small and avoids timeouts.
-# The leagueIds filter is silently ignored on this endpoint, so we filter
-# by league in Python after fetch.
-# First window starts from TODAY (not a hardcoded date) to avoid re-fetching
-# already-played fixtures on every run.
-# July–Oct windows use monthly splits (max_pages=30) to avoid hitting the
-# 20-page / 1,000-fixture cap for dense periods.
-windows = [
-    (TODAY,        "2026-06-15", 20),
-    ("2026-06-16", "2026-06-30", 20),
-    ("2026-07-01", "2026-07-31", 30),
-    ("2026-08-01", "2026-08-31", 30),
-    ("2026-09-01", "2026-09-30", 30),
-    ("2026-10-01", "2026-10-31", 30),
-    ("2026-11-01", "2026-12-31", 20),
-]
+# Fetch windows are generated dynamically from TODAY so the script works across
+# year boundaries without manual updates. Dense months (Jul–Oct) use 30 pages.
+windows = _build_windows(TODAY)
 
 all_fixtures: list = []
 for start, end, max_pg in windows:

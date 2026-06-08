@@ -75,29 +75,6 @@ Inspector pre-match view has no historical context. Operator cannot see "what ha
 - Query: settled fixtures in same (zone, bts_pocket) cell, last N settled (default 50)
 - Returns: list of recent fixtures in same cell with scores, pick outcomes (if emitted)
 
-**Response shape:**
-```json
-{
-  "zone": "strong",
-  "bts_pocket": "strong_over",
-  "cell_n": 3420,
-  "threeway_hit": 74.2,
-  "recent": [
-    {
-      "date": "2026-05-22",
-      "home_team": "Shamrock Rovers",
-      "away_team": "Sligo Rovers",
-      "home_score": 1,
-      "away_score": 2,
-      "threeway_green": false,
-      "emitted": true,
-      "outcome": "LOSS"
-    },
-    ...
-  ]
-}
-```
-
 **Inspector tab integration:**
 - Each promoted fixture card gets a "History" button → opens modal with similar-odds table
 - Shows cell hit rate (from foundation) + recent fixture list

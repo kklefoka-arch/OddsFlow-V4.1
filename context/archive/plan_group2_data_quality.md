@@ -44,33 +44,15 @@ This removes only the ghost upcoming rows — fixtures that will never receive o
 ## G2 — Write draw_zone / bts_pocket to Fixtures on Insert
 
 ### What this is
-`fixtures` schema has `draw_zone` and `bts_pocket` columns. Nothing writes them. `classify_fixture()` computes them on-the-fly from odds whenever needed. This means every call to classify a fixture re-derives zone and bts from raw odds.
+`fixtures` schema has `draw_zone` and `bts_pocket` columns. Nothing writes them. `classify_fixture()` computes them on-the-fly from odds whenever needed.
 
-### Is this worth doing?
+### Decision: Implement — with a backfill migration
 
-**Arguments for:**
-- Direct SQL filter on `draw_zone` and `bts_pocket` — enables queries like "all strong/strong_over fixtures" without Python classification
-- G4 (similar-odds inspector) would benefit: `WHERE draw_zone=? AND bts_pocket=?` instead of fetching all settled rows and re-classifying in Python
-- Drift monitoring queries simplify
-
-**Arguments against:**
-- Denormalization — zone and bts are derivable from draw_odd, btts_yes_odd, btts_no_odd
-- If zone/bts thresholds change (they have before), stored values become stale
-- Current on-the-fly approach is fast enough at 28,607 fixtures
-
-**Decision: Implement — with a backfill migration**
-
-The G4 similar-odds query (Group 1) needs to scan all settled fixtures and classify each one. At 28,607 rows, classifying in Python on every request adds latency. Storing draw_zone/bts_pocket makes that query a simple indexed filter.
+The G4 similar-odds query (Group 1) needs to scan all settled fixtures and classify each one. Storing draw_zone/bts_pocket makes that query a simple indexed filter.
 
 ### Approach
 
 **Step 1 — Backfill existing rows**
-```sql
--- Conceptual (done via Python, not raw SQL, to use classify logic)
--- fetch all settled rows with draw_odd, btts_yes_odd, btts_no_odd
--- call zone_of() + bts_of() per row
--- UPDATE fixtures SET draw_zone=?, bts_pocket=? WHERE id=?
-```
 Script: `migrate_write_zones.py`
 
 **Step 2 — Write on insert in fetch_upcoming.py**
@@ -80,9 +62,6 @@ bts  = bts_of(row.get("btts_yes_odd"), row.get("btts_no_odd"))
 # add draw_zone=zone, bts_pocket=bts to INSERT and UPDATE statements
 ```
 
-**Step 3 — Write on score update in fetch_results.py**
-- fetch_results.py does not insert fixtures, only updates scores — no change needed
-
 ### Cross-cut to G4
 Once draw_zone/bts_pocket are stored, `GET /inspector/similar` becomes:
 ```sql
@@ -91,7 +70,6 @@ WHERE draw_zone = ? AND bts_pocket = ?
   AND home_score IS NOT NULL
 ORDER BY date DESC LIMIT 50
 ```
-Instead of fetching all settled rows and classifying in Python. This is the primary payoff.
 
 ### Files to create/modify
 | File | Change |
@@ -108,5 +86,3 @@ Instead of fetching all settled rows and classifying in Python. This is the prim
 2. `migrate_write_zones.py` — backfill draw_zone/bts_pocket on existing settled + upcoming rows
 3. `fetch_upcoming.py` — add zone/bts writes on insert and update
 4. Verify: `SELECT draw_zone, count(*) FROM fixtures GROUP BY draw_zone` shows expected distribution
-
-Run Group 2 after Group 1 is implemented, so G4's similar-odds query can use the stored columns immediately.

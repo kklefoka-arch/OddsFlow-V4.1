@@ -31,7 +31,7 @@ G5 is closed. No action required in Group 3.
 
 **Approach: Chained daily script**
 
-Create `run_daily.bat` (or `run_daily.ps1`) that runs the full daily operator flow in sequence:
+Create `run_daily.ps1` that runs the full daily operator flow in sequence:
 
 ```powershell
 # run_daily.ps1
@@ -49,8 +49,6 @@ python settle.py
 Write-Host "=== done ==="
 ```
 
-This script is the operator's single command. It can also be the target of Windows Task Scheduler (G6).
-
 ---
 
 ## G6 — Scheduler
@@ -59,40 +57,14 @@ This script is the operator's single command. It can also be the target of Windo
 
 ### Scenario A: Group 1 livescores hook implemented
 
-Only fetch_upcoming.py needs scheduling (livescores handles match-day automation).
-
-**Task: daily_fetch**
-- Trigger: daily at 09:00 UTC (adjust to match Sportmonks update cadence)
-- Action: `python C:\OddsFlowV4\fetch_upcoming.py`
-- Working dir: `C:\OddsFlowV4`
-- Log: `C:\OddsFlowV4\logs\fetch_upcoming.log` (append)
+Only fetch_upcoming.py needs scheduling.
 
 ### Scenario B: Group 1 livescores hook NOT implemented
 
-Three tasks:
-
-**Task 1: daily_fetch** (same as above)
-
-**Task 2: post_match_results**
-- Trigger: daily at 23:30 UTC (after most European match windows close)
-- Action: `python C:\OddsFlowV4\fetch_results.py`
-- Or: use `run_daily.ps1` which chains all three scripts
-
-**Task 3: daily_settle** (if not chained)
-- Trigger: daily at 23:45 UTC (after fetch_results)
-- Action: `python C:\OddsFlowV4\settle.py`
-
-### Logging
-All scripts should append stdout to `logs/` so Task Scheduler runs are auditable:
-
-```powershell
-python fetch_upcoming.py >> C:\OddsFlowV4\logs\fetch_upcoming.log 2>&1
-```
-
-Create `logs/` directory. Add `logs/*.log` to `.gitignore`.
+Three tasks: daily_fetch + post_match_results + daily_settle.
 
 ### system_health table
-The DB has a `system_health` table (currently never written). Each script run should write a heartbeat:
+Each script run writes a heartbeat:
 ```sql
 INSERT OR REPLACE INTO system_health (script, last_run, status)
 VALUES ('fetch_upcoming', datetime('now'), 'ok');
@@ -101,28 +73,15 @@ This lets the Reports tab surface "last run" times and detect stale fetches.
 
 ---
 
-## Files to create/modify
+## Files created/modified
 
 | File | Change |
 |------|--------|
-| `run_daily.ps1` | New — chained operator script (Scenario B) |
-| `fetch_upcoming.py` | Add system_health heartbeat write |
-| `fetch_results.py` | Add system_health heartbeat write |
-| `settle.py` | Add system_health heartbeat write |
-| `logs/` | New directory (gitignored) |
-| `.gitignore` | Add `logs/*.log` |
-| `setup_scheduler.ps1` | New — creates Windows Task Scheduler tasks (operator runs once) |
-
----
-
-## Implementation order within group
-
-1. Confirm Group 1 scope (livescores hook yes/no)
-2. Add system_health heartbeat to all three scripts
-3. Create `logs/` + `.gitignore` entry
-4. If Scenario B: create `run_daily.ps1`
-5. Create `setup_scheduler.ps1` — run once to register tasks
-6. Verify: run Task Scheduler task manually, check log output, check system_health table
+| `run_daily.ps1` | Chained operator script |
+| `fetch_upcoming.py` | system_health heartbeat write |
+| `fetch_results.py` | system_health heartbeat write |
+| `settle.py` | system_health heartbeat write |
+| `setup_scheduler.ps1` | Creates Windows Task Scheduler tasks (run once) |
 
 ---
 
@@ -132,5 +91,3 @@ This lets the Reports tab surface "last run" times and detect stale fetches.
 |-----------------|---------------|
 | Livescores hook implemented | G5 closed; G6 = 1 scheduled task only |
 | Livescores hook deferred | G5 open; G6 = 3 scheduled tasks + run_daily.ps1 |
-
-**Recommendation:** Implement Group 1 with the livescores hook. It is more complex but collapses Group 3 into a single scheduled task and eliminates the manual post-match workflow entirely. Worth the extra build effort in Group 1.

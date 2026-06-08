@@ -530,7 +530,7 @@ function renderFoundationTable(wrap, cells) {
     return;
   }
   const ZONE_ORDER = ['strong', 'standard', 'low', 'one_sided'];
-  const BTS_ORDER  = ['strong_over', 'slight_over', 'slight_under', 'strong_under'];
+  const BTS_ORDER  = ['over', 'under'];  // v4 2-value axis
   const sorted = [...cells].sort((a, b) => {
     const zi = ZONE_ORDER.indexOf(a.zone) - ZONE_ORDER.indexOf(b.zone);
     if (zi !== 0) return zi;

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//mnt/c/oddflow testing/**)",
+      "Read(//mnt/c/OddsFlow AI Website/**)"
+    ]
+  }
+}

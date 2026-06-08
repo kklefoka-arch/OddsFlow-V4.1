@@ -11,8 +11,6 @@ from fastapi import APIRouter, Query
 from app.api.routes_picks import settle_pick, is_hit
 from app.db.database import get_conn
 from app.engine.classify import zone_of, bts_yesno
-from app.engine.foundation import load_foundation
-from app.engine.promotion import compute_foundation, PROMOTE, PROMOTE_TOLERANCE
 from app.engine.static_policy import PROMOTED_CELLS
 from app.settings import settings
 
@@ -223,11 +221,9 @@ def recent_settled(
     for r in rows:
         fx_id = r["fixture_id"]
         em_zone = r["em_zone"]; em_bts = r["em_bts"]
-        em_df = r["em_df"] if "em_df" in r.keys() else None
-        if em_df:
-            pk = f"{em_zone}:{em_df}:{em_bts}" if (em_zone and em_bts) else None
-        else:
-            pk = f"{em_zone}:{em_bts}" if (em_zone and em_bts) else None
+        # v4 partition is always 2-key (zone, bts). DF is a signal stored as
+        # metadata on each row but is NOT part of the partition key.
+        pk = f"{em_zone}:{em_bts}" if (em_zone and em_bts) else None
         fx = fixtures_by_id.setdefault(fx_id, {
             "fixture_id":    fx_id,
             "kickoff_utc":   r["kickoff_utc"],
@@ -439,3 +435,4 @@ def daily_calendar(
         "end_date":    today_date.strftime("%Y-%m-%d"),
         "days":        days_out,
     }
+                               

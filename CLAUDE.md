@@ -66,18 +66,21 @@ Baselines in `static_policy.V3_MARKETS` and `PROMOTED_CELLS` are now computed un
 
 | File | Purpose |
 |------|---------|
-| `fetch_upcoming.py` | Daily — refresh pre-match odds (1X2, BTTS, goals_over_15/25/35, corners_over_75/85/95) + kickoff datetimes |
+| `fetch_upcoming.py` | Daily — refresh pre-match odds (1X2, BTTS, goals_over_15/25/35, corners_over_85/95) + kickoff datetimes. Dynamic month windows (auto rolls to 2027+). |
 | `emit_picks.py` | Calls local `/picks?days=3` to materialise picks + writes heartbeat |
-| `refresh_odds.py` | Intraday odds refresh for next-8h fixtures (M2) |
-| `refresh_stats.py` | Corner-stats backfill (14d lookback, M3) |
+| `refresh_odds.py` | Intraday odds refresh for next-30h fixtures (M2). Reclassifies draw_zone/bts_pocket from updated odds. Chains re-emit. |
+| `refresh_stats.py` | Corner-stats backfill (14d adaptive lookback, M3) |
 | `fetch_results.py` | After matches — scores + fixture_stats |
-| `settle.py` | After fetch_results — pick_results writer (goals_nl, corners_nl, dnb, alpha_win) |
-| `app/engine/static_policy.py` | `V3_ACTIVE` / `V3_MARKETS` / `PROMOTED_CELLS` — 9-cell V3 policy |
-| `app/engine/classify.py` | `zone_of()` (raw-notes boundaries) + `bts_of()` |
+| `settle.py` | After fetch_results — pick_results writer (goals_nl, corners_nl, threeway) |
+| `scripts/reconcile_orphans.py` | Nightly — synthetic ORPHAN outcome for picks stranded by dropped leagues or stale fixtures |
+| `app/engine/static_policy.py` | `V3_ACTIVE` (8-cell v4 policy) / `V3_MARKETS` / `PROMOTED_CELLS` |
+| `app/engine/classify.py` | `zone_of()` + `bts_yesno()` (cell axis) + `bts_of()` (display) + `bts_spread()` + `df_of()` |
 | `app/engine/promotion.py` | `compute_foundation()` — display matrix only, not pick firing |
-| `app/api/routes_picks.py` | `/picks` — reads `V3_ACTIVE`, supersede logic |
+| `app/api/routes_picks.py` | `/picks` — reads `V3_ACTIVE` (8-cell), boundary validation, H2H signal, supersede logic |
 | `app/api/routes_foundation.py` | `/api/foundation` — Analysis tab |
-| `app/api/routes_diagnostics.py` | Multi-metric cron heartbeat across the 7 daily pipeline tasks |
+| `app/api/routes_diagnostics.py` | Today tab + runbook — per-task heartbeat, chain verification, drift summary |
+| `app/api/routes_results.py` | `/api/results` + `/api/livescores` — Results tab + live score auto-settle |
+| `app/api/routes_webhooks.py` | Sportmonks Push webhook receiver (scaffolding — disabled until secret configured) |
 | `data/oddsflow_v4.db` | Live SQLite DB (not in git). Backups under `data/oddsflow_v4.db.bak.*` |
 
 ## Daily flow
@@ -91,22 +94,22 @@ Same as before — Task Scheduler runs the 12 jobs from `setup_scheduler.ps1`. M
 | 03:00 / 03:15 | OddsFlow_FetchResults_SA / Settle_SA | South American window |
 | 06:00 / 06:15 | OddsFlow_FetchResults_DawnSA / Settle_DawnSA | Late SA catch-up (M3) |
 | 08:00 / 08:05 | OddsFlow_FetchUpcoming / EmitPicks | Daily pre-match refresh + emit |
-| 14:30 | OddsFlow_RefreshOdds | Intraday refresh for next-8h fixtures (M2) |
+| 14:30 | OddsFlow_RefreshOdds | Intraday refresh for next-30h fixtures (M2) — reclassifies zone/bts |
 | 23:30 / 23:45 | OddsFlow_FetchResults / Settle | European window close |
 
 ## Decisions made
 
-- **V3 restored (Session 19, 2026-05-28).** Picks fire from `V3_ACTIVE` (9 cells, 2-key). DF removed from classify and from all route lookups. `compute_foundation()` still serves the `/api/foundation` display.
-- **Zone boundaries shifted to raw-notes overlay** (2.90 / 3.30 / 3.80 / 4.30). Fixtures DB re-backfilled — 8,145 `draw_zone` updates.
-- **`df_level` columns retained on fixtures + emit_log** as additive historical metadata. New emit rows write NULL.
-- **Markets per Golden Rule (Session 19 extension):** strong → goals_nl O1.5 + dnb; standard → goals_nl O1.5 + corners_nl O8.5 + dnb; low → dnb + goals_nl O2.5; one_sided → alpha_win + goals_nl O2.5.
-- **Goals NL pick label** parses via regex `r"Over (\d+\.5) Goals"` — both `Over 1.5 Goals` (strong/standard) and `Over 2.5 Goals` (low/one_sided) settle correctly.
-- **Corners NL pick label** "Over 8.5 Corners" — `settle.py` regex `r"Over (\d+\.5) Corners"`.
-- **Goals NL natural-line only by zone** — Over 1.5 for strong/standard, Over 2.5 for low/one_sided. No effective-line fallback. `pick_odd` NULL on most goals_nl / all corners_nl rows is expected; SPA renders `—` via `fmt.odd`.
-- **`write_emit_log()`** supersedes stale unsettled picks when alpha team label changes.
-- **fetch_upcoming.py** stores full kickoff datetimes; monthly windows; max_pages=30 (Jul–Oct), =20 elsewhere.
+- **v4 policy live (2026-05-30).** Picks fire from `V3_ACTIVE` (8 cells, 2-key `(zone, bts)`). Markets: goals_nl O1.5 / corners_nl O7.5(strong)·O8.5 / threeway alpha-or-draw. DF + BTS spread are signals, not axes.
+- **Zone boundaries (raw-notes overlay, Session 19):** 2.90 / 3.30 / 3.80 / 4.30. Fixtures DB re-backfilled — 8,145 `draw_zone` updates.
+- **`df_level` columns retained** as additive signal metadata (SIGNAL, not partition axis). New emits write DF0/DF1/DF2 from classify_fixture.
+- **Hit-rate convention:** threeway = binary wins/settled (draw = WIN, no void). Legacy dnb rows: (wins+voids)/settled. Wilson out.
+- **Goals NL pick label** parses via regex `r"Over (\d+\.5) Goals"` — `Over 1.5 Goals` (all zones). Corners NL: `r"Over (\d+\.5) Corners"`.
+- **Goals-override signal:** in `standard:over` and `low:over`, when BTS spread==strong the goals_nl leg carries the strong-spread hit rate (83.8% / 85.0%) instead of the blended cell rate. Per-market tilt, not a cell axis.
+- **`write_emit_log()`** validates (zone, bts) against V3_ACTIVE before INSERT (boundary safety). Supersedes stale unsettled picks when alpha team label changes.
+- **fetch_upcoming.py** stores full kickoff datetimes. Dynamic month windows (7 months ahead, auto-rolls to 2027+). max_pages=30 (Jul–Oct), =20 elsewhere.
+- **refresh_odds.py** reclassifies draw_zone/bts_pocket after each intraday odds update so stored cell stays current.
 - **`fixtures.league_id`** stores internal DB `leagues.id` (via `_league_id_map`).
-- **Hit-rate convention** = V3 non-loss (voids count as 1). Wilson reverted in Session 16.
+- **Webhook receiver** (`routes_webhooks.py`) disabled by default (returns 503 until `SPORTMONKS_WEBHOOK_SECRET` set). Polling pipeline is primary settlement path.
 
 ## Pending / next
 
@@ -128,7 +131,7 @@ Same as before — Task Scheduler runs the 12 jobs from `setup_scheduler.ps1`. M
 | `context/06_process_flow.md` | Full fixture lifecycle |
 | `context/07_system_language.md` | Every term defined; what exists vs what does not |
 | `context/engine_knowledge.md` | Tabs + abbreviations + operating notes |
-| `context/plan_group1/2/3` | Historical implementation plans (IMPLEMENTED — audit trail) |
+| `context/archive/` | Historical implementation plans (plan_group1/2/3 — IMPLEMENTED — audit trail) |
 
 ## Session checklist
 

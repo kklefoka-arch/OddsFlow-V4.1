@@ -62,16 +62,10 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             pass  # column already exists
 
     indexes = [
+        # Uniqueness constraints
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_leagues_smid  ON leagues(sportmonks_id)  WHERE sportmonks_id IS NOT NULL",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_teams_smid    ON teams(sportmonks_id)    WHERE sportmonks_id IS NOT NULL",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_fixtures_smid ON fixtures(sportmonks_id) WHERE sportmonks_id IS NOT NULL",
-    ]
-    for ddl in indexes:
-        conn.execute(ddl)
-
-
-def get_conn(db_path: str) -> sqlite3.Connection:
-    """Return a sqlite3 connection with Row factory enabled."""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+        # Performance indexes — added v4 (2026-06-08) for 10k+ fixture scale
+        # fixtures.date — picks/upcoming window queries (WHERE date >= ? AND date <= ?)
+        "CREATE INDEX IF NOT EXISTS idx_fixtures_date    

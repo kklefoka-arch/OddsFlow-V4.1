@@ -1,11 +1,15 @@
 """OddsFlow V4 -- Picks endpoint.
 
-Picks fire from the V3 static policy (static_policy.V3_ACTIVE).
-Markets per zone:
-  strong    -> goals_nl (Over 1.5)
-  standard  -> goals_nl (Over 1.5) + corners_nl (Over 8.5)
-  low       -> dnb  [activated -- LOW_ZONE_SUPPRESS=False]
-  one_sided -> alpha_win
+Picks fire from the v4 static policy (static_policy.V3_ACTIVE).
+8 active cells, 2-key (zone × bts).  3 markets per cell:
+  goals_nl   Over 1.5 Goals     (all zones)
+  corners_nl Over 7.5 Corners   (strong zone) / Over 8.5 (rest)
+  threeway   Alpha or Draw      (draw = WIN, no void)
+
+Signals (display + one goals-override, never gates):
+  spread     strong/slight BTS spread — goals_hit override in standard:over + low:over
+  df         DF0/DF1/DF2 — display chip only
+  h2h_corner over/under/none — from our own prior meetings
 """
 
 from __future__ import annotations
@@ -236,8 +240,9 @@ def write_emit_log(conn: sqlite3.Connection, emit_rows: list[dict]) -> dict[str,
             """,
             (p["fixture_id"], p["market"], uuid),
         )
-        # df_level column populated from V3.2 partition (Session 23c — Rule 1
-        # overridden). Historic rows kept NULL; new emits store DF0/DF1/DF2.
+        # df_level stored as metadata (Durable Rule 1 — DF is a SIGNAL, not a
+        # cell axis). New emits write the DF signal value (DF0/DF1/DF2) from
+        # classify_fixture. Historic rows from pre-v4 may be NULL.
         result = conn.execute(
             """
             INSERT OR IGNORE INTO emit_log
@@ -354,7 +359,9 @@ def picks(days: int = Query(3, ge=1, le=14)) -> dict[str, Any]:
             spread = clf.get("spread")   # SIGNAL (strong/slight)
             df     = clf.get("df")       # SIGNAL (DF0/DF1/DF2)
 
-            if zone is None or bts is None or df is None:
+            if zone is None or bts is None:
+                # DF is a SIGNAL (Durable Rule 1) — never gates emission.
+                # Only zone (draw_odd) and bts (btts direction) are cell axes.
                 skip_reasons["unclassifiable"] += 1
                 # Granular reasons so the picks tab can show why.
                 draw_odd = d.get("draw_odd")
@@ -507,13 +514,4 @@ def picks(days: int = Query(3, ge=1, le=14)) -> dict[str, Any]:
         "counts_by_class":  {"promote": len(picks_out)},
         "counts_by_market": counts_by_market,
         "counts_by_leg":    {"single": len(picks_out)},
-        "counts_by_tier":   counts_by_tier,
-        "window_days":      days,
-        "as_of":            now.isoformat(),
-        "skip_reasons":     skip_reasons,
-        "emit_log":         emit_summary,
-        "picks":            picks_out,
-    }
-
-
-# /picks/prx9 retired (V3 restoration, Session 19) — dead route removed (no frontend caller).
+        

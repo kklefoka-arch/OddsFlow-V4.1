@@ -13,9 +13,6 @@ from fastapi.responses import StreamingResponse
 
 from app.api.routes_picks import settle_pick
 from app.db.database import get_conn
-from app.engine.classify import zone_of, bts_yesno
-from app.engine.foundation import load_foundation
-from app.engine.promotion import compute_foundation, PROMOTE, PROMOTE_TOLERANCE
 from app.settings import settings
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -351,7 +348,7 @@ def emit_market_breakdown(
         rows = conn.execute(
             f"""
             SELECT em.market, em.pick,
-                   f.draw_odd, f.btts_yes_odd, f.btts_no_odd,
+                   em.zone AS em_zone, em.bts_pocket AS em_bts,
                    f.home_score, f.away_score, f.home_odd, f.away_odd,
                    fs.total_corners
             FROM emit_log em
@@ -416,12 +413,14 @@ def emit_market_breakdown(
         conn.close()
 
     # Bucket settled outcomes by (zone, bts, market) — 2-key cells, aggregated
-    # across picks. DF is a signal (surfaced separately), not a cell axis.
+    # across picks. Use the stored zone/bts_pocket from emit_log (the
+    # classification at emission time) rather than re-deriving from current
+    # odds — odds may drift post-emission and the stored values are authoritative.
     buckets: dict[tuple[str, str, str], list[float]] = {}
     for r in rows:
-        zone = zone_of(r["draw_odd"])
-        bts = bts_yesno(r["btts_yes_odd"], r["btts_no_odd"])
-        if zone is None or bts is None:
+        zone = r["em_zone"]
+        bts = r["em_bts"]
+        if not zone or not bts:
             continue
         outcome = settle_pick(r["market"], r["home_score"], r["away_score"],
                                r["home_odd"], r["away_odd"], r["pick"],
@@ -616,5 +615,4 @@ def paper_trading_csv(
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="oddsflow_picks_{today}.csv"'},
-    )
+        headers={"Content-Disposition": f'attac
