@@ -18,6 +18,85 @@
 
 ---
 
+## Daily Operations Cheat Sheet
+
+> **Morning routine (after 08:05 SAST if scheduler missed):**
+> ```powershell
+> cd C:\OddsFlowV4
+> python fetch_upcoming.py
+> python emit_picks.py --mode emit
+> ```
+> **Evening routine (after 23:45 SAST if scheduler missed):**
+> ```powershell
+> cd C:\OddsFlowV4
+> python fetch_results.py
+> python settle.py
+> ```
+> **One command to run everything:**
+> ```powershell
+> cd C:\OddsFlowV4
+> .\run_daily.ps1
+> ```
+> ⚠️ Always `cd C:\OddsFlowV4` first. Do **not** type the path alone on a line — PowerShell will error.
+
+---
+
+## Daily Task List
+
+Run these tasks each day to keep the system current. The Task Scheduler handles them automatically, but run manually if the Today tab shows overdue badges.
+
+### Morning (after 08:00 SAST)
+
+| # | Task | Command | What it does |
+|---|------|---------|--------------|
+| 1 | **Fetch upcoming** | `python fetch_upcoming.py` | Pulls next 7 months of fixtures + pre-match odds from Sportmonks. Classifies zone + BTS for each fixture. |
+| 2 | **Emit picks** | `python emit_picks.py --mode emit` | Calls `/picks?days=3` and writes results to `emit_log`. Picks appear on the Picks tab. |
+
+### Afternoon (after 14:30 SAST — same day)
+
+| # | Task | Command | What it does |
+|---|------|---------|--------------|
+| 3 | **Refresh odds** | `python refresh_odds.py` | Re-fetches odds for fixtures kicking off in the next 30h. Updates draw_zone + bts_pocket if odds moved. Chains a re-emit automatically. |
+
+### Evening / Night (after matches end, ~23:30 SAST)
+
+| # | Task | Command | What it does |
+|---|------|---------|--------------|
+| 4 | **Fetch results** | `python fetch_results.py` | Pulls final scores + fixture_stats (corners) from Sportmonks. |
+| 5 | **Settle picks** | `python settle.py` | Reads scores and writes WIN/LOSS/VOID to `pick_results`. Hit rates update. |
+
+### Weekly (any time)
+
+| # | Task | Command | What it does |
+|---|------|---------|--------------|
+| 6 | **Refresh stats** | `python refresh_stats.py` | Backfills corner stats for the last 14 days. Fixes "pending (played)" picks stuck on unsettled corners. |
+| 7 | **Reconcile orphans** | `python scripts/reconcile_orphans.py` | Marks picks for dropped/expired fixtures as ORPHAN so they don't pollute hit rate. |
+
+### How to open PowerShell in the right folder
+
+Option A — from File Explorer:
+1. Navigate to `C:\OddsFlowV4`
+2. Click the address bar, type `powershell`, press Enter
+
+Option B — from Start:
+1. Open **Windows PowerShell**
+2. Type `cd C:\OddsFlowV4` and press Enter
+3. Run your command
+
+Option C — double-click `run_now.bat` in `C:\OddsFlowV4` to run the full chain in a command window.
+
+### Checking the scheduler is running
+
+Open the Today tab at `http://localhost:8083/` → look at the **Runbook** strip. Red badges mean that task hasn't run within its expected window. If multiple tasks are red:
+
+1. Press `Win + R` → type `taskschd.msc` → Enter
+2. In Task Scheduler, expand **Task Scheduler Library**
+3. Look for tasks starting with `OddsFlow_` — verify they show Status = **Ready** and Last Run Result = **0x0**
+4. If any show **Disabled**, right-click → Enable
+5. If the Last Run Result is not 0x0, right-click the task → Run to trigger it manually
+
+---
+
 ## 1. Starting the Server
 
 The server auto-starts at system boot via Task Scheduler (OddsFlow_Server task). If it's not running:
@@ -242,69 +321,4 @@ All endpoints prefixed with `http://localhost:8083`. Full list at `/docs`.
 | `GET /upcoming?days=N&tier=T` | All classified upcoming fixtures |
 | `GET /api/foundation` | Foundation matrix JSON (all/t1t2/t3) |
 | `GET /inspector/partition_drift?recent_days=N` | Drift vs historical per promoted cell |
-| `GET /inspector/similar?zone=Z&bts=B` | Historical fixtures in same cell |
-| `GET /reports/emit_performance?tier=T` | Multi-window engine performance |
-| `GET /reports/emit_market_breakdown?days=N&tier=T` | Per-cell, per-market hit rates |
-| `GET /reports/emit_recent?days=N&tier=T` | Recent fixtures with settled picks |
-| `GET /reports/settle_activity?days=N` | Settlements per day |
-| `GET /reports/paper_trading.csv?days=N` | CSV export of picks |
-| `GET /api/results?days=N` | Settled fixtures from DB |
-| `GET /diagnostics/today_summary` | System summary for Today tab |
-| `GET /diagnostics/runbook` | Per-task overdue status |
-| `GET /diagnostics/db_state` | Table counts |
-| `GET /diagnostics/odds_coverage` | Odds coverage per league |
-| `GET /api/livescores` | In-play fixtures (Sportmonks live) |
-
----
-
-## 8. Troubleshooting
-
-### "Board shows no picks" / "Upcoming shows zone=—"
-Fixtures are missing odds (draw_odd is NULL). Cause: fetch_upcoming.py hasn't run since the fixtures were added, or Sportmonks had no odds for those matches. Fix: run `python fetch_upcoming.py` manually.
-
-### "Reports show pending (played) picks"
-Corner stats are missing — settle.py needs fixture_stats to settle corners_nl. Fix: run `python refresh_stats.py` then `python settle.py`.
-
-### "Runbook shows 8 overdue"
-Normal after a gap in scheduler operation. The runbook uses per-task thresholds; green = task has run within its threshold. After the chain runs, overdue count drops.
-
-### "Server is down"
-```powershell
-cd C:\OddsFlowV4
-uvicorn app.main:app --host 0.0.0.0 --port 8083 --reload
-```
-Or use Task Scheduler → OddsFlow_Server → Run.
-
-### "503 on /api/webhooks/sportmonks"
-Expected. The Sportmonks Push webhook receiver is scaffolding — it is disabled by default.
-It returns 503 until `SPORTMONKS_WEBHOOK_SECRET` is set in `.env`.
-The polling pipeline (fetch_results at 23:30 / 03:00 / 06:00 SAST) is the primary settlement path — no action needed.
-
-### "DB is locked / malformed"
-The DB is never malformed — the "malformed" error from tools is a write-lock from the running server. Connect via the API (`/docs`) or stop the server first for direct SQLite access.
-
-### "pick_odd shows —"
-Expected for corners_nl and goals_nl (natural-line odds aren't always stored separately). The pick is still emitted correctly; the `—` is the UI rendering `null` pick_odd. Odds may populate after `refresh_odds.py` runs at 14:30.
-
----
-
-## 9. Six-Week Settlement Watch (from 2026-05-30)
-
-The v4 policy (8-cell, 2-key) is under a 6-week live validation. Until 2026-07-11:
-
-- Monitor hit rates in Reports → Multi-window performance and Per-cell market hit rates
-- Target: all 8 cells tracking ≥ their historical composite rate (within noise)
-- If a cell shows persistent drift (>10pp below baseline for 30+ picks), raise for operator review
-- After 6 weeks, decide: recalibrate baselines, re-evaluate DF as a partition refinement, or proceed as-is
-
----
-
-## 10. End-of-Session Checklist
-
-1. Update `context/04_current_status.md` with what changed
-2. Update `CLAUDE.md` if any durable decisions were made
-3. `git add -A && git commit -m "session N: <summary>" && git push`
-
----
-
-*OddsFlow V4 — ground-zero engine. The edge is in the partition. Trust the hit rate.*
+| `GET /inspector/similar?zone=Z&bts=B
