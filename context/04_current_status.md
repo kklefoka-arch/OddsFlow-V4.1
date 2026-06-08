@@ -1,7 +1,7 @@
 # Current Status — OddsFlow V4
 
 Update this file at the end of every session.
-Last updated: 2026-06-08 (Session — full pipeline audit + holistic fixes)
+Last updated: 2026-06-08 (Session — alignment audit: User-Agent fix + ACTIVE_LEAGUE_SPORTMONKS_IDS)
 
 ---
 
@@ -87,6 +87,7 @@ These files are no longer referenced by any route or the SPA. They can be manual
 
 | Session | Date | Work done |
 |---------|------|-----------|
+| This session (alignment) | 2026-06-08 | **Alignment audit — all old roads closed.** (1) HTTP 403 fix: all 4 API scripts (fetch_upcoming, refresh_odds, refresh_stats, fetch_results) now send `User-Agent: OddsFlowV4/1.0` — Sportmonks blocks `Python-urllib/*`. (2) Single source of truth for active leagues: `ACTIVE_LEAGUE_SPORTMONKS_IDS` frozenset added to `static_policy.py` (29 leagues, 797 USL League Two excluded). (3) routes_upcoming.py + routes_picks.py now filter by `lg.sportmonks_id IN (...)` from that frozenset — 797 can no longer surface in Upcoming or Picks tabs. (4) fetch_results.py + reconcile_orphans.py ACTIVE_LEAGUES sets aligned to full 29 leagues with sync comments. (5) Diagnostic test files cleaned up. CLAUDE.md + context/04 updated. Committed + pushed. |
 | This session (continued) | 2026-06-08 | **Phase B: Live app verification — all 9 SPA tabs + all API endpoints.** Verified all tabs load correctly with real data: Picks (1 fixture, standard:over, 3 markets), Picks Log (3 configs displayed), Upcoming (177 fixtures, 6 promoted, tier summary), Analysis (29,470 fixtures, 8 cells, T1+T2/T3 split), Inspector (drift table, 8 cells no_data — expected), Reports (multi-window perf, 881 settled, 71.3% legs hit), Results (settled fixtures, Live Scores button), Today (runbook + hit rate summary), Stats (DB counts, cron heartbeat). All endpoints return valid data. **Operational note surfaced:** pipeline cron jobs are stale — fetch_upcoming shows 220.6h overdue, suggesting Task Scheduler isn't running (or health records not writing). The KTP vs Haka pick IS in the DB and shows correctly, so picks exist for today's fixture. Operator should verify Task Scheduler and run `run_daily.ps1` manually if needed. No code changes this sub-session. |
 | This session | 2026-06-08 | **Full pipeline audit + holistic fixes + documentation cleanup.** Phase A: read all 8 pipeline scripts + 9 route files + settings + SPA template + OPERATOR_MANUAL. Phase C issue catalogue: H1 (fetch_upcoming windows hardcoded to 2026), H2 (refresh_odds no reclassify after odds update), M1-M4 (CLAUDE.md/OPERATOR_MANUAL stale docs). Phase D fixes: (1) fetch_upcoming.py — dynamic `_build_windows()` replaces hardcoded 2026 windows list, auto-rolls into 2027. (2) refresh_odds.py — added `_zone()`/`_bts()` inline helpers + reclassifies draw_zone/bts_pocket in UPDATE after each intraday refresh. Phase E docs: CLAUDE.md key-files table + decisions section updated to v4 reality; OPERATOR_MANUAL hit-rate convention clarified (threeway binary vs legacy dnb non-loss) + webhook 503 note added; routes_upcoming.py confirmed already clean (frozenset removed in prior session). Context docs: all 6 context docs rewritten to reflect v4 accurately (8 cells, binary BTS axis, 3 markets, signals not gates). plan_group1/2/3 archived. |
 | 1–8 | 2026-05-22 → 2026-05-24 | V4 built, SPA + 7 tabs, league fixes, classification + matrix wired |
@@ -95,10 +96,4 @@ These files are no longer referenced by any route or the SPA. They can be manual
 | 11 | 2026-05-26 | First V3 settlement (22W 8L 6V); plain-language summary screenshot captured |
 | 12 | 2026-05-26 | Project 2 calibration completed — declared **reference-only, not a gate** |
 | 13 | 2026-05-26 | 5 scheduler tasks activated |
-| 14 | 2026-05-26 | League migration analysis (Americas/Asia) |
-| 15 | 2026-05-27 | Process audit M1/M2/M3 — corners settlement, refresh_odds, dawn SA catch-up |
-| 16 | 2026-05-27 | **Engine reverted to literal Session 11 reference** (first revert) |
-| 17 | 2026-05-27 | Enhanced analysis built from raw-notes spec — DF separation evidence, 6-pocket BTS |
-| 18 | 2026-05-27 | V3.1 DF-aware partition deployed (20 cells) — *the drift this session reversed* |
-| 19 | 2026-05-28 | **Second V3 restoration + raw-notes zone-boundary overlay**. DF removed everywhere. Boundaries 2.90/3.30/3.80/4.30. 8,145 draw_zone rows re-backfilled. Durable Rules pinned in CLAUDE.md to prevent re-drift. AI Website docs aligned. |
-| 19+ | 2026-05-28 | **Golden Rule extension** (Notes 28-05-26.docx). V3_MARKETS expanded: strong cells +dnb, standard cells +dnb, l
+| 14 | 2026-05-26 | League migration a

@@ -110,6 +110,8 @@ Same as before — Task Scheduler runs the 12 jobs from `setup_scheduler.ps1`. M
 - **refresh_odds.py** reclassifies draw_zone/bts_pocket after each intraday odds update so stored cell stays current.
 - **`fixtures.league_id`** stores internal DB `leagues.id` (via `_league_id_map`).
 - **Webhook receiver** (`routes_webhooks.py`) disabled by default (returns 503 until `SPORTMONKS_WEBHOOK_SECRET` set). Polling pipeline is primary settlement path.
+- **Active league source of truth:** `app/engine/static_policy.ACTIVE_LEAGUE_SPORTMONKS_IDS` (frozenset). Routes (upcoming, picks) filter by this. Pipeline scripts (fetch_results, reconcile_orphans) maintain their own ACTIVE_LEAGUES sets — keep in sync. fetch_upcoming.py holds the dict version (with tier info). All confirmed 29 leagues, 797 excluded.
+- **All API scripts use `User-Agent: OddsFlowV4/1.0`** — Sportmonks blocks `Python-urllib/*`. Fix applied to fetch_upcoming, refresh_odds, refresh_stats, fetch_results (2026-06-08).
 
 ## Pending / next
 
@@ -131,11 +133,4 @@ Same as before — Task Scheduler runs the 12 jobs from `setup_scheduler.ps1`. M
 | `context/06_process_flow.md` | Full fixture lifecycle |
 | `context/07_system_language.md` | Every term defined; what exists vs what does not |
 | `context/engine_knowledge.md` | Tabs + abbreviations + operating notes |
-| `context/archive/` | Historical implementation plans (plan_group1/2/3 — IMPLEMENTED — audit trail) |
-
-## Session checklist
-
-On start: scan directory → read CLAUDE.md → read `context/04_current_status.md`
-On end: update `context/04_current_status.md` → update this file → commit → push
-
-**Special rule:** if a session ends with a change to `static_policy.py`, `classify.py`, `promotion.py`, or zone/df logic anywhere — explicitly call out which Durable Rule (above) was affected and why the operator approved it. Default: do not change.
+| `context/arch
