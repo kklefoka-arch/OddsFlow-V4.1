@@ -2,96 +2,90 @@
 
 Run after match days to update home_score, away_score, and corner stats
 for fixtures that have been played but not yet settled in the DB.
-
-What this closes:
-  Phase 8 (Score Update) — Gap G1 in context/06_process_flow.md
-
 After running this, run settle.py to write pick_results from emit_log.
-"""
-import sqlite3, urllib.request, urllib.parse, json, time
-from datetime import date as date_cls, datetime, timedelta, timezone
-from collections import defaultdict
 
-# V3.1 (2026-05-28): prefer env override; fall back to literal for legacy.
+--------------------------------------------------------------------------
+2026-06-09 rewrite — fetch results BY FIXTURE ID, one fixture per call.
+--------------------------------------------------------------------------
+History of the bug this fixes:
+  * The original version fetched a whole week window then kept only fixtures
+    whose league was in a hard-coded ACTIVE_LEAGUES set. That set had drifted
+    from the live subscription (USL League Two / 797 was wrongly marked
+    dropped), so real fixtures were filtered out and never settled.
+  * A first rewrite batched ids via fixtures/multi/{ids}. Sportmonks fails the
+    WHOLE batch if any single id is outside the subscription, so one dead id
+    sank every good fixture sharing its chunk.
+
+This version queries fixtures/{id} individually. One bad id can no longer
+affect any other. Fixtures the API cannot return (genuinely removed leagues,
+e.g. La Liga 2 / 567) come back empty; once older than RESULT_GIVEUP_DAYS they
+are marked status='no_result' so they stop re-appearing, and reconcile_orphans
+settles their picks as synthetic ORPHANs.
+
+Active-league source of truth: app/engine/static_policy.ACTIVE_LEAGUE_SPORTMONKS_IDS
+(mirrored below). On startup we clear any 'no_result' flag on fixtures whose
+league is active again, so re-adding a league (like 797) automatically re-opens
+its fixtures for fetching.
+"""
+import sqlite3, urllib.request, urllib.parse, urllib.error, json, time
+from datetime import datetime, timezone, date as date_cls
+
 import os as _os
 TOKEN = _os.environ.get("SPORTMONKS_TOKEN", "2AWINN4fYPiQkY2lfHee9TASZubv74uP1RIY4ILY15Mzg4bw5bH2v2SeKGAN")
 DB    = r"C:\OddsFlowV4\data\oddsflow_v4.db"
 BASE  = "https://api.sportmonks.com/v3/football"
 
-# Verified via API probe 2026-05-23: Shamrock Rovers 1-2 Sligo Rovers
-# type_id=34 → corners (home=3, away=4 for that match)
-CORNERS_TYPE_ID = 34
+CORNERS_TYPE_ID = 34          # verified 2026-05-23
+RESULT_GIVEUP_DAYS = 5        # after this, an un-returnable fixture is marked no_result
 
-ACTIVE_LEAGUES = {
-    # T1
-    573, 444, 345, 292, 360, 779, 648, 3537, 1034,
-    # T2
-    393, 405, 579, 585, 588, 681, 678, 696, 1689, 295, 286, 289, 791, 3550, 989,
-    # T3 (797 USL League Two removed 2026-05-29 — operator dropped from API subscription)
-    1642, 351, 1607, 2545, 1098,
+# Active leagues are read at runtime from leagues.active (maintained by
+# sync_leagues.py from the live Sportmonks subscription). Fallback snapshot
+# below is only used if that column can't be read. (2026-06-09)
+_ACTIVE_FALLBACK = {
+    286, 289, 292, 295, 345, 351, 360, 363, 393, 396, 444, 447, 573, 579,
+    585, 588, 648, 779, 791, 989, 1034, 1362, 1607, 1642, 2545, 3306, 3537, 3550,
 }
 
 
-# ---------------------------------------------------------------------------
-# API
-# ---------------------------------------------------------------------------
+def load_active_sm(conn) -> set[int]:
+    try:
+        ids = {int(r[0]) for r in conn.execute(
+            "SELECT sportmonks_id FROM leagues WHERE active=1 AND sportmonks_id IS NOT NULL")}
+        return ids or set(_ACTIVE_FALLBACK)
+    except Exception:
+        return set(_ACTIVE_FALLBACK)
 
-def api_get(path: str, params: dict, retries: int = 3) -> dict:
-    """V3.1 (2026-05-28): retry on transient API failures (D13 in process audit).
 
-    Backoff: 8s, 16s on first two retries. Matches fetch_upcoming.py pattern.
-    """
+def api_get(path: str, params: dict, retries: int = 3) -> dict | None:
+    """GET with retry. Returns parsed json, or None on HTTP 404/empty fixture."""
     params["api_token"] = TOKEN
     url = f"{BASE}/{path}?{urllib.parse.urlencode(params)}"
-    req = urllib.request.Request(url)
-    last_err: Exception | None = None
+    req = urllib.request.Request(url, headers={"User-Agent": "OddsFlowV4/1.0"})
+    last_err = None
     for attempt in range(retries):
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            if e.code in (404, 403):      # fixture not in subscription / not found
+                return None
+            last_err = e
         except Exception as e:
             last_err = e
-            if attempt < retries - 1:
-                wait = 8 * (2 ** attempt)
-                print(f"    [retry {attempt + 1}/{retries - 1}] {e} — sleeping {wait}s")
-                time.sleep(wait)
-    raise last_err  # type: ignore[misc]
+        if attempt < retries - 1:
+            time.sleep(8 * (2 ** attempt))
+    if last_err:
+        raise last_err
+    return None
 
-
-def fetch_all(path: str, params: dict, max_pages: int = 20) -> list:
-    rows, page = [], 1
-    while page <= max_pages:
-        p = {**params, "page": page, "per_page": 50}
-        data = api_get(path, p)
-        batch = data.get("data", [])
-        if not isinstance(batch, list):
-            break
-        rows.extend(batch)
-        print(f"    page {page}: {len(batch)} fixtures (total: {len(rows)})")
-        if not data.get("pagination", {}).get("has_more"):
-            break
-        page += 1
-        time.sleep(0.25)
-    return rows
-
-
-# ---------------------------------------------------------------------------
-# Parsers
-# ---------------------------------------------------------------------------
 
 def extract_scores(scores_list: list) -> tuple[int | None, int | None]:
-    """Parse FT score from Sportmonks scores include.
-
-    Uses description="CURRENT" entries — the running/final score at FT.
-    Returns (home_score, away_score) or (None, None) if not available.
-    """
     home_score = away_score = None
     for s in (scores_list or []):
         if s.get("description") != "CURRENT":
             continue
-        score_data = s.get("score") or {}
-        goals = score_data.get("goals")
-        participant = score_data.get("participant")
+        sd = s.get("score") or {}
+        goals, participant = sd.get("goals"), sd.get("participant")
         if goals is None:
             continue
         try:
@@ -105,12 +99,7 @@ def extract_scores(scores_list: list) -> tuple[int | None, int | None]:
     return home_score, away_score
 
 
-def extract_corners(stats_list: list, home_p_id: int, away_p_id: int) -> tuple[int | None, int | None]:
-    """Parse corner stats from Sportmonks statistics include.
-
-    type_id=34 = corners. Verified against a known match.
-    Returns (home_corners, away_corners) — either may be None if not available.
-    """
+def extract_corners(stats_list: list, home_p_id, away_p_id) -> tuple[int | None, int | None]:
     home_corners = away_corners = None
     for s in (stats_list or []):
         if s.get("type_id") != CORNERS_TYPE_ID:
@@ -130,140 +119,112 @@ def extract_corners(stats_list: list, home_p_id: int, away_p_id: int) -> tuple[i
     return home_corners, away_corners
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+def main() -> None:
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    now_utc = datetime.now(timezone.utc)
+    today   = now_utc.strftime("%Y-%m-%d")
+    now_ts  = now_utc.strftime("%Y-%m-%d %H:%M:%S")
+    active_csv = ",".join(str(i) for i in load_active_sm(conn))
 
-conn = sqlite3.connect(DB)
-conn.row_factory = sqlite3.Row
-now_utc = datetime.now(timezone.utc)
-today   = now_utc.strftime("%Y-%m-%d")
-now_ts  = now_utc.strftime("%Y-%m-%d %H:%M:%S")
+    # Self-heal: re-open fixtures previously given up on whose league is active
+    # again (e.g. 797 re-added). Removed leagues stay no_result.
+    reopened = conn.execute(f"""
+        UPDATE fixtures SET status=NULL
+        WHERE COALESCE(status,'')='no_result'
+          AND league_id IN (SELECT id FROM leagues WHERE sportmonks_id IN ({active_csv}))
+    """).rowcount
+    conn.commit()
+    if reopened:
+        print(f"Re-opened {reopened} fixture(s) in re-activated leagues.\n")
 
-# Find all unsettled fixtures we can fetch results for:
-# Must have a sportmonks_id (inserted by fetch_upcoming.py)
-# Must be before today (match day has passed)
-unsettled = conn.execute("""
-    SELECT id, sportmonks_id, date, home_team_name, away_team_name
-    FROM fixtures
-    WHERE home_score IS NULL
-      AND sportmonks_id IS NOT NULL
-      AND substr(date, 1, 10) < ?
-    ORDER BY date ASC
-""", (today,)).fetchall()
+    unsettled = conn.execute("""
+        SELECT f.id, f.sportmonks_id, f.date, f.home_team_name, f.away_team_name,
+               l.sportmonks_id AS sm_league, l.name AS league_name
+        FROM fixtures f
+        LEFT JOIN leagues l ON l.id = f.league_id
+        WHERE f.home_score IS NULL
+          AND f.sportmonks_id IS NOT NULL
+          AND substr(f.date, 1, 10) < ?
+          AND COALESCE(f.status, '') <> 'no_result'
+        ORDER BY f.date ASC
+    """, (today,)).fetchall()
 
-print(f"Unsettled fixtures eligible for result fetch: {len(unsettled)}")
-if not unsettled:
-    conn.close()
-    print("Nothing to fetch — run again after match days.")
-    raise SystemExit(0)
+    print(f"Unsettled fixtures eligible for result fetch: {len(unsettled)}")
+    if not unsettled:
+        conn.close()
+        print("Nothing to fetch — run again after match days.")
+        return
 
-# Quick lookup: sportmonks_id → DB row
-sm_map: dict[int, sqlite3.Row] = {
-    int(row["sportmonks_id"]): row for row in unsettled
-}
+    updated = inserted_stats = not_finished = no_data = giveup = 0
+    # per-league tally: name -> [settled, no_data]
+    by_league: dict[str, list[int]] = {}
 
-# Group by week (Monday–Sunday) to minimise API calls
-by_week: dict[str, list[sqlite3.Row]] = defaultdict(list)
-for row in unsettled:
-    date_str = (row["date"] or "")[:10]
-    if not date_str:
-        continue
-    d = date_cls.fromisoformat(date_str)
-    monday = d - timedelta(days=d.weekday())
-    by_week[monday.isoformat()].append(row)
+    for i, row in enumerate(unsettled, 1):
+        lname = row["league_name"] or f"league_id={row['sm_league']}"
+        by_league.setdefault(lname, [0, 0])
+        smid = int(row["sportmonks_id"])
+        try:
+            data = api_get(f"fixtures/{smid}", {"include": "scores;statistics;participants"})
+        except Exception as e:
+            print(f"    API error id={smid}: {e}")
+            data = None
 
-print(f"Grouped into {len(by_week)} week window(s)\n")
-
-updated = inserted_stats = skipped_no_score = skipped_not_ours = 0
-
-for week_start in sorted(by_week):
-    week_rows = by_week[week_start]
-    week_end  = (date_cls.fromisoformat(week_start) + timedelta(days=6)).isoformat()
-
-    print(f"Window {week_start} to {week_end}  ({len(week_rows)} fixture(s) expected)")
-
-    try:
-        batch = fetch_all(
-            f"fixtures/between/{week_start}/{week_end}",
-            {"include": "scores;statistics;participants"},
-        )
-    except Exception as e:
-        print(f"  API error: {e} — skipping window")
-        continue
-
-    relevant = [fx for fx in batch if fx.get("league_id") in ACTIVE_LEAGUES]
-    print(f"  {len(batch)} from API, {len(relevant)} in active leagues")
-
-    for fx in relevant:
-        sm_id = fx.get("id")
-        db_row = sm_map.get(int(sm_id)) if sm_id is not None else None
-        if db_row is None:
-            skipped_not_ours += 1
+        fx = (data or {}).get("data") if data else None
+        if not fx:
+            no_data += 1
+            by_league[lname][1] += 1
+            date_str = (row["date"] or "")[:10]
+            try:
+                age = (now_utc.date() - date_cls.fromisoformat(date_str)).days
+            except Exception:
+                age = 999
+            if age >= RESULT_GIVEUP_DAYS:
+                conn.execute("UPDATE fixtures SET status='no_result', updated_at=? WHERE id=?",
+                             (now_ts, row["id"]))
+                giveup += 1
+            time.sleep(0.12)
             continue
 
         home_score, away_score = extract_scores(fx.get("scores") or [])
-
         if home_score is None or away_score is None:
-            # Match may not have finished (in-play, postponed, etc.)
-            skipped_no_score += 1
+            not_finished += 1
+            time.sleep(0.12)
             continue
 
         total_goals = home_score + away_score
-
-        # Participant IDs for corner attribution
         participants = fx.get("participants") or []
-        home_p_id = next(
-            (int(p["id"]) for p in participants if p.get("meta", {}).get("location") == "home"),
-            None
-        )
-        away_p_id = next(
-            (int(p["id"]) for p in participants if p.get("meta", {}).get("location") == "away"),
-            None
-        )
-
-        home_corners, away_corners = None, None
+        home_p_id = next((int(p["id"]) for p in participants
+                          if p.get("meta", {}).get("location") == "home"), None)
+        away_p_id = next((int(p["id"]) for p in participants
+                          if p.get("meta", {}).get("location") == "away"), None)
+        home_corners, away_corners = (None, None)
         if home_p_id and away_p_id:
-            home_corners, away_corners = extract_corners(
-                fx.get("statistics") or [], home_p_id, away_p_id
-            )
+            home_corners, away_corners = extract_corners(fx.get("statistics") or [],
+                                                         home_p_id, away_p_id)
 
-        # Write score to fixtures
         conn.execute("""
-            UPDATE fixtures SET
-                home_score=?, away_score=?, total_goals=?,
-                status='settled', updated_at=?
-            WHERE id=?
-        """, (home_score, away_score, total_goals, now_ts, db_row["id"]))
+            UPDATE fixtures SET home_score=?, away_score=?, total_goals=?,
+                   status='settled', updated_at=? WHERE id=?
+        """, (home_score, away_score, total_goals, now_ts, row["id"]))
         updated += 1
+        by_league[lname][0] += 1
 
-        print(f"    OK {db_row['home_team_name']} {home_score}-{away_score} {db_row['away_team_name']}"
-              f"  corners={home_corners}/{away_corners}")
-
-        # Write fixture_stats if corners available
         if home_corners is not None and away_corners is not None:
             conn.execute("""
                 INSERT OR REPLACE INTO fixture_stats
                     (fixture_id, home_corners, away_corners, total_corners, raw_stats_json)
                 VALUES (?, ?, ?, ?, ?)
-            """, (db_row["id"], home_corners, away_corners, home_corners + away_corners,
+            """, (row["id"], home_corners, away_corners, home_corners + away_corners,
                   json.dumps(fx.get("statistics") or [])))
             inserted_stats += 1
 
-    time.sleep(0.5)
+        if updated <= 40 or updated % 25 == 0:
+            print(f"    OK {row['home_team_name']} {home_score}-{away_score} "
+                  f"{row['away_team_name']}  [{lname}]")
+        if i % 25 == 0:
+            conn.commit()
+        time.sleep(0.12)
 
-conn.execute(
-    "INSERT INTO system_health (metric, value) VALUES (?, ?)",
-    ("fetch_results", f"ok: {updated} scores, {inserted_stats} stats"),
-)
-conn.commit()
-conn.close()
-
-print()
-print(f"Done")
-print(f"  Scores written:        {updated}")
-print(f"  Corner stats written:  {inserted_stats}")
-print(f"  No score yet:          {skipped_no_score}")
-print()
-if updated > 0:
-    print("Next step: run  python settle.py  to write pick_results from emit_log.")
+    conn.execute("INSERT INTO system_health (metric, value) VALUES (?, ?)",
+                 ("fetch_results",

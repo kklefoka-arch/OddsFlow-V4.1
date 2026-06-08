@@ -47,7 +47,7 @@ def _bts(yes, no):
 def api_get(path: str, params: dict, retries: int = 3) -> dict:
     params["api_token"] = TOKEN
     url = f"{BASE}/{path}?{urllib.parse.urlencode(params)}"
-    req = urllib.request.Request(url)
+    req = urllib.request.Request(url, headers={"User-Agent": "OddsFlowV4/1.0"})
     last_err: Exception | None = None
     for attempt in range(retries):
         try:
@@ -200,4 +200,4 @@ if updated > 0:
         ).returncode
         print(f"Re-emit chained call returned rc={rc}")
     except Exception as exc:
-        print(f"Re-emit chain failed: {exc}")
+    

@@ -29,17 +29,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "oddsflow_v4.db"
-# Match the active league set used by fetch_results / routes_results.
-# Keep this in sync; if it drifts, the reconciler will mark fewer picks
+# SOURCE OF TRUTH: app/engine/static_policy.ACTIVE_LEAGUE_SPORTMONKS_IDS
+# Keep this in sync with that frozenset, fetch_upcoming.ACTIVE_LEAGUES, and
+# fetch_results.ACTIVE_LEAGUES. If it drifts, the reconciler marks fewer picks
 # than expected — visible in the runbook value.
-ACTIVE_LEAGUES = {
-    # T1
-    573, 444, 345, 292, 360, 779, 648, 3537, 1034,
-    # T2
-    393, 405, 579, 585, 588, 681, 678, 696, 1689, 295, 286, 289, 791, 3550, 989,
-    # T3 (USL League Two 797 dropped 2026-05-29)
-    1642, 351, 1607, 2545, 1098,
+# Active leagues are read at runtime from leagues.active (maintained by
+# sync_leagues.py). Fallback snapshot used only if the column can't be read.
+_ACTIVE_FALLBACK = {
+    286, 289, 292, 295, 345, 351, 360, 363, 393, 396, 444, 447, 573, 579,
+    585, 588, 648, 779, 791, 989, 1034, 1362, 1607, 1642, 2545, 3306, 3537, 3550,
 }
+
+
+def _load_active(conn: sqlite3.Connection) -> set:
+    try:
+        ids = {int(r[0]) for r in conn.execute(
+            "SELECT sportmonks_id FROM leagues WHERE active=1 AND sportmonks_id IS NOT NULL")}
+        return ids or set(_ACTIVE_FALLBACK)
+    except Exception:
+        return set(_ACTIVE_FALLBACK)
+
+
 ORPHAN_AGE_HOURS = 48  # fixture older than this with no score + no settlement
 
 
@@ -67,6 +77,7 @@ def _mark_orphans(conn: sqlite3.Connection, reason: str, where_sql: str, params:
         SELECT em.pick_uuid
         FROM emit_log em
         JOIN fixtures f         ON f.id = em.fixture_id
+        LEFT JOIN leagues l     ON l.id = f.league_id
         LEFT JOIN pick_results pr ON pr.pick_uuid = em.pick_uuid
         WHERE pr.pick_uuid IS NULL
           AND {where_sql}
@@ -94,37 +105,15 @@ def main() -> None:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
-        # Reason A — fixture's league_id no longer in ACTIVE_LEAGUES.
-        league_placeholders = ",".join("?" * len(ACTIVE_LEAGUES))
+        # NOTE: fixtures.league_id is the INTERNAL DB leagues.id, while
+        # ACTIVE_LEAGUES holds SPORTMONKS league ids. We therefore join the
+        # leagues table and compare l.sportmonks_id (not f.league_id) against
+        # ACTIVE_LEAGUES. (Fixed 2026-06-09 — the old f.league_id comparison
+        # mixed the two id systems and under-counted dropped-league orphans.)
+        active = _load_active(conn)
+        league_placeholders = ",".join("?" * len(active))
+        # Reason A — fixture's league is no longer in the active subscription.
         league_count = _mark_orphans(
             conn,
             reason="league_dropped",
-            where_sql=f"f.league_id NOT IN ({league_placeholders})",
-            params=list(ACTIVE_LEAGUES),
-        )
-        # Reason B — kickoff > 48h ago, league still active, but no scores.
-        stale_count = _mark_orphans(
-            conn,
-            reason="stale_no_result",
-            where_sql=(
-                f"f.league_id IN ({league_placeholders}) "
-                f"AND f.home_score IS NULL "
-                f"AND f.date < datetime('now', '-{ORPHAN_AGE_HOURS} hours')"
-            ),
-            params=list(ACTIVE_LEAGUES),
-        )
-        total = league_count + stale_count
-        _write_health(
-            conn,
-            f"ok: league_dropped={league_count} stale_no_result={stale_count} total={total}",
-        )
-        print(
-            f"reconcile_orphans: league_dropped={league_count} "
-            f"stale_no_result={stale_count} total={total}"
-        )
-    finally:
-        conn.close()
-
-
-if __name__ == "__main__":
-    main()
+            where_sql=f"COAL

@@ -36,6 +36,11 @@ def _build_windows(today_str: str) -> list:
 # Re-Foundation (2026-05-30) — country-context tiers: T1 = top flight of its
 # country (regardless of Sportmonks' own numbering), T2 = the division directly
 # below, T3 = the rest + cups. Tier split for analysis is T1+T2 vs T3.
+# Fetch list + editorial tier map. Membership matches the live Sportmonks
+# subscription (28 leagues, synced 2026-06-09 via sync_leagues.py). Tier
+# (T1/T2/T3) is the operator's own classification — the API does not provide
+# it — so it is maintained here. New leagues default sensibly by pyramid level;
+# the 5 added 2026-06-09 are flagged NEW for operator confirmation.
 ACTIVE_LEAGUES = {
     # T1 — top flight of its country
     573:  1,   # Sweden — Allsvenskan
@@ -47,30 +52,30 @@ ACTIVE_LEAGUES = {
     648:  1,   # Brazil — Serie A
     3537: 1,   # Japan — J1 100 Year Vision League
     1034: 1,   # South Korea — K League 1
-    989:  1,   # China — Super League        (was T2; top flight of China)
-    1098: 1,   # Bolivia — Liga De Futbol Prof (was T3; top flight of Bolivia)
-    696:  1,   # Ecuador — Liga Pro          (was T2; top flight of Ecuador)
-    1689: 1,   # Canada — Premier League     (was T2; top flight of Canada)
-    286:  1,   # Estonia — Meistriliiga      (was T2; top flight of Estonia)
-    393:  1,   # Kazakhstan — Premier League (was T2; top flight of Kazakhstan)
-    405:  1,   # Lithuania — A Lyga          (was T2; top flight of Lithuania)
+    989:  1,   # China — Super League
+    286:  1,   # Estonia — Meistriliiga
+    393:  1,   # Kazakhstan — Premier League
     # T2 — division directly below the top flight
     579:  2,   # Sweden — Superettan
-    678:  2,   # Colombia — Primera B
-    295:  2,   # Finland — Ykköseliga
+    295:  2,   # Finland — Ykkösliiga
     289:  2,   # Estonia — Esiliiga A
     791:  2,   # United States — USL Championship
     3550: 2,   # Japan — J2/J3 100 Year Vision League
-    # T3 — lower tiers + cups
+    363:  2,   # Republic of Ireland — First Division   (NEW 2026-06-09)
+    396:  2,   # Kazakhstan — First Division             (NEW 2026-06-09)
+    447:  2,   # Norway — 1. Division                    (NEW 2026-06-09)
+    1362: 2,   # South Korea — K League 2                (NEW 2026-06-09)
+    # T3 — lower tiers
     1642: 3,   # Argentina — Reserve League
     351:  3,   # Iceland — 2. Deild
     1607: 3,   # United States — USL League One
     2545: 3,   # United States — MLS Next Pro
-    585:  3,   # Sweden — Ettan: North       (was T2; 3rd tier)
-    588:  3,   # Sweden — Ettan: South       (was T2; 3rd tier)
-    681:  3,   # Colombia — Copa Colombia     (was T2; cup competition)
-    # 797 (USA — USL League Two) removed 2026-05-29 — operator dropped from
-    # Sportmonks subscription. Historical fixtures stay in DB.
+    585:  3,   # Sweden — Ettan: North
+    588:  3,   # Sweden — Ettan: South
+    3306: 3,   # Finland — Ykkönen (3rd tier)            (NEW 2026-06-09)
+    # Dropped 2026-06-09 (no longer in subscription): 1098 Bolivia, 696 Ecuador,
+    # 1689 Canada, 405 Lithuania, 678 Colombia Primera B, 681 Colombia Copa,
+    # 797 USL League Two, 567 La Liga 2.
 }
 
 BASE = "https://api.sportmonks.com/v3/football"
@@ -79,7 +84,7 @@ BASE = "https://api.sportmonks.com/v3/football"
 def api_get(path: str, params: dict, retries: int = 3) -> dict:
     params["api_token"] = TOKEN
     url = f"{BASE}/{path}?{urllib.parse.urlencode(params)}"
-    req = urllib.request.Request(url)
+    req = urllib.request.Request(url, headers={"User-Agent": "OddsFlowV4/1.0"})
     last_err: Exception | None = None
     for attempt in range(retries):
         try:
@@ -287,13 +292,4 @@ for fx in fixtures:
             home_team.get("name"), away_team.get("name"),
             home_odd, draw_odd, away_odd, btts_yes, btts_no,
             g15, g25, g35, c75, c85, c95,
-            fx_zone, fx_bts, now_ts, now_ts, now_ts, json.dumps(fx.get("odds") or []),
-        ))
-        inserted += 1
-
-conn.execute(
-    "INSERT INTO system_health (metric, value) VALUES ('fetch_upcoming', 'ok')",
-)
-conn.commit()
-conn.close()
-print(f"\nDone — inserted={inserted}  updated={updated}  skipped={skipped}")
+            fx_zone, fx_bts, now_ts, now_ts, now_ts, json.dumps(fx.ge

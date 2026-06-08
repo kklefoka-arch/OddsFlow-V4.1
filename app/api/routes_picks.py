@@ -23,7 +23,7 @@ from fastapi import APIRouter, Query
 
 from app.db.database import get_conn
 from app.engine.classify import classify_fixture
-from app.engine.static_policy import V3_ACTIVE
+from app.engine.static_policy import V3_ACTIVE, ACTIVE_LEAGUE_SPORTMONKS_IDS
 from app.settings import settings
 
 router = APIRouter(tags=["picks"])
@@ -309,10 +309,13 @@ def picks(days: int = Query(3, ge=1, le=14)) -> dict[str, Any]:
     today = now.strftime("%Y-%m-%d")
     horizon = (now + timedelta(days=days)).strftime("%Y-%m-%d")
 
+    sm_ids = list(ACTIVE_LEAGUE_SPORTMONKS_IDS)
+    league_placeholders = ",".join("?" * len(sm_ids))
+
     conn = get_conn(settings.sqlite_path)
     try:
         rows = conn.execute(
-            """
+            f"""
             SELECT f.id, f.date, f.tier, f.home_team_id, f.away_team_id,
                    f.home_odd, f.draw_odd, f.away_odd,
                    f.btts_yes_odd, f.btts_no_odd,
@@ -329,9 +332,10 @@ def picks(days: int = Query(3, ge=1, le=14)) -> dict[str, Any]:
             WHERE f.home_score IS NULL
               AND f.date >= ?
               AND substr(f.date, 1, 10) <= ?
+              AND lg.sportmonks_id IN ({league_placeholders})
             ORDER BY f.date ASC
             """,
-            (today, horizon),
+            (today, horizon, *sm_ids),
         ).fetchall()
 
         drift_cache: dict[tuple[str, str, str], dict[str, Any]] = {}
@@ -510,8 +514,4 @@ def picks(days: int = Query(3, ge=1, le=14)) -> dict[str, Any]:
 
     return {
         "count":            len(picks_out),
-        "fixtures_count":   len(fixture_ids),
-        "counts_by_class":  {"promote": len(picks_out)},
-        "counts_by_market": counts_by_market,
-        "counts_by_leg":    {"single": len(picks_out)},
         

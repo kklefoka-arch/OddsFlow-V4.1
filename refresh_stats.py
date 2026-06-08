@@ -32,7 +32,7 @@ LOOKBACK_MAX_DAYS = 60  # Bundle 6: don't reach further than this even with stra
 def api_get(path: str, params: dict, retries: int = 3) -> dict:
     params["api_token"] = TOKEN
     url = f"{BASE}/{path}?{urllib.parse.urlencode(params)}"
-    req = urllib.request.Request(url)
+    req = urllib.request.Request(url, headers={"User-Agent": "OddsFlowV4/1.0"})
     last_err: Exception | None = None
     for attempt in range(retries):
         try:
@@ -206,4 +206,3 @@ conn.close()
 print()
 print(f"Done — corners filled: {filled}")
 print(f"       still missing:  {still_missing}  (Sportmonks didn't return stats)")
-print(f"       API errors:     {errors}")

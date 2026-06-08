@@ -43,9 +43,12 @@ def upcoming(
             except ValueError:
                 pass
 
-    # V3.2 stone policy directly (the authoritative promotion set, 3-key).
-    from app.engine.static_policy import V3_ACTIVE
+    from app.engine.static_policy import V3_ACTIVE, ACTIVE_LEAGUE_SPORTMONKS_IDS
     promoted_keys: set[tuple[str, str, str]] = set(V3_ACTIVE.keys())
+
+    # Active-league filter: exclude fixtures from dropped leagues (e.g. 797).
+    sm_ids = list(ACTIVE_LEAGUE_SPORTMONKS_IDS)
+    league_placeholders = ",".join("?" * len(sm_ids))
 
     conn = get_conn(settings.sqlite_path)
     try:
@@ -65,10 +68,11 @@ def upcoming(
             WHERE f.home_score IS NULL
               AND f.date >= ?
               AND substr(f.date, 1, 10) <= ?
+              AND lg.sportmonks_id IN ({league_placeholders})
               {tier_clause}
             ORDER BY f.date ASC
             """,
-            [today, horizon, *tier_params],
+            [today, horizon, *sm_ids, *tier_params],
         ).fetchall()
     finally:
         conn.close()
@@ -111,12 +115,4 @@ def upcoming(
             "partition_promoted": partition_promoted,
         })
 
-    return {
-        "count": len(data),
-        "window_days": days,
-        "summary": {
-            "by_tier": by_tier,
-            "partition_promoted": promoted_count,
-        },
-        "data": data,
-    }
+    r

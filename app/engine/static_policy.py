@@ -26,6 +26,43 @@ from typing import Any
 
 LOW_ZONE_SUPPRESS: bool = False
 
+# ---------------------------------------------------------------------------
+# ACTIVE_LEAGUE_SPORTMONKS_IDS — single source of truth for which leagues are
+# in the current Sportmonks subscription. Used by routes to filter the Upcoming
+# and Picks tabs so dropped leagues never surface in the operator UI.
+#
+# DURABLE SOURCE (2026-06-09): the active set is now read from the DB column
+# leagues.active, which sync_leagues.py refreshes directly from the Sportmonks
+# /leagues endpoint. This ends the old four-places-to-edit drift. The literal
+# below is only a fallback used if the DB can't be read at import time; it is a
+# snapshot of the live subscription as of 2026-06-09 (28 leagues).
+# ---------------------------------------------------------------------------
+_ACTIVE_FALLBACK: frozenset[int] = frozenset({
+    286, 289, 292, 295, 345, 351, 360, 363, 393, 396, 444, 447, 573, 579,
+    585, 588, 648, 779, 791, 989, 1034, 1362, 1607, 1642, 2545, 3306, 3537, 3550,
+})
+
+
+def _load_active_league_ids() -> frozenset[int]:
+    """Read active sportmonks league ids from leagues.active; fall back to the
+    snapshot literal if the DB or column is unavailable."""
+    import os as _os, sqlite3 as _sqlite3
+    db = _os.path.join(_os.path.dirname(__file__), "..", "..", "data", "oddsflow_v4.db")
+    try:
+        c = _sqlite3.connect(db)
+        try:
+            ids = {int(r[0]) for r in c.execute(
+                "SELECT sportmonks_id FROM leagues WHERE active = 1 "
+                "AND sportmonks_id IS NOT NULL")}
+        finally:
+            c.close()
+        return frozenset(ids) if ids else _ACTIVE_FALLBACK
+    except Exception:
+        return _ACTIVE_FALLBACK
+
+
+ACTIVE_LEAGUE_SPORTMONKS_IDS: frozenset[int] = _load_active_league_ids()
+
 _GL15 = "goals_over_15_odd"
 _CL75 = "corners_over_75_odd"
 _CL85 = "corners_over_85_odd"
@@ -88,42 +125,4 @@ V3_MARKETS: dict[tuple[str, str], dict[str, Any]] = {
     ("one_sided", "over"): {
         "goals_nl":   {"line": 1.5, "hit": 84.4, "n": 2435, "odd_col": _GL15},
         "corners_nl": {"line": 8.5, "hit": 68.8, "n": 2279, "odd_col": _CL85},
-        "threeway":   {"line": None, "pick": _AOD, "hit": 88.1, "n": 2435, "odd_col": None},
-        "composite": 80.4,
-        "signals": {"spread": "display", "df": "display", "h2h_corner": "display"},
-    },
-    ("one_sided", "under"): {
-        "goals_nl":   {"line": 1.5, "hit": 82.3, "n": 1373, "odd_col": _GL15},
-        "corners_nl": {"line": 8.5, "hit": 65.1, "n": 1175, "odd_col": _CL85},
-        "threeway":   {"line": None, "pick": _AOD, "hit": 94.3, "n": 1373, "odd_col": None},
-        "composite": 80.6,
-        "signals": {"spread": "display", "df": "display", "h2h_corner": "display"},
-    },
-}
-
-V3_ACTIVE: dict[tuple[str, str], dict[str, Any]] = {
-    k: v for k, v in V3_MARKETS.items()
-    if not (LOW_ZONE_SUPPRESS and k[0] == "low")
-}
-
-# Market keys (everything else in a cell dict — composite, signals — is metadata).
-MARKET_KEYS = ("goals_nl", "corners_nl", "threeway")
-
-
-# ---------------------------------------------------------------------------
-# PROMOTED_CELLS — display + inspector metadata (2-key). bts_pocket holds the
-# over/under value (v4 cell axis) for back-compat with route field names.
-# ---------------------------------------------------------------------------
-PROMOTED_CELLS: dict[tuple[str, str], dict[str, Any]] = {}
-for (_z, _b), _cell in V3_ACTIVE.items():
-    _gn, _cn, _tw = _cell["goals_nl"], _cell["corners_nl"], _cell["threeway"]
-    PROMOTED_CELLS[(_z, _b)] = {
-        "zone": _z, "bts_pocket": _b,
-        "cell_promoted": True,
-        "threeway_hit": _tw["hit"], "threeway_pick": _tw["pick"],
-        "gn_hit": _gn["hit"], "cn_hit": _cn["hit"],
-        "n_fixtures": _tw["n"],
-        "composite": _cell["composite"],
-        "promote_status": "PASS",
-        "provisional": False,
-    }
+    
