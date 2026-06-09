@@ -80,7 +80,7 @@ def api_get(path: str, params: dict, retries: int = 4) -> dict:
     last_err: Exception | None = None
     for attempt in range(retries):
         try:
-            req = urllib.request.Request(url)
+            req = urllib.request.Request(url, headers={"User-Agent": "OddsFlowV4/1.0"})
             with urllib.request.urlopen(req, timeout=120) as r:
                 return json.loads(r.read())
         except Exception as e:

@@ -84,7 +84,8 @@ def _sm_fetch_scores(sportmonks_id: int) -> dict | None:
     }
     url = f"{SM_BASE}/fixtures/{sportmonks_id}?{urllib.parse.urlencode(params)}"
     try:
-        with urllib.request.urlopen(urllib.request.Request(url), timeout=15) as r:
+        req = urllib.request.Request(url, headers={"User-Agent": "OddsFlowV4/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
             return json.loads(r.read())
     except Exception:
         return None

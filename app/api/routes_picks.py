@@ -279,17 +279,19 @@ def write_emit_log(conn: sqlite3.Connection, emit_rows: list[dict]) -> dict[str,
             else:
                 skip_count += 1
     conn.commit()
-    if invalid_count:
-        # Surface boundary rejections in system_health so the runbook (Bundle 5)
-        # can flag this. Best-effort — never raise out of the writer.
-        try:
-            conn.execute(
-                "INSERT INTO system_health (metric, value) VALUES (?, ?)",
-                ("emit_partition_invalid", f"rejected={invalid_count}"),
-            )
-            conn.commit()
-        except Exception:
-            pass
+    # Always heartbeat the partition-boundary check so the runbook (Bundle 5)
+    # reflects the LATEST emit rather than staying red on one old rejection:
+    # 'ok: rejected=0' when clean, 'rejected=N' (alerting) when boundaries hit.
+    # Best-effort — never raise out of the writer.
+    try:
+        hb = f"rejected={invalid_count}" if invalid_count else "ok: rejected=0"
+        conn.execute(
+            "INSERT INTO system_health (metric, value) VALUES (?, ?)",
+            ("emit_partition_invalid", hb),
+        )
+        conn.commit()
+    except Exception:
+        pass
     return {
         "new":               new_count,
         "skip":              skip_count,

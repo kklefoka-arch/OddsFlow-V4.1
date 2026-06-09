@@ -43,7 +43,11 @@ _FINISHED = {"FT", "AET", "FT_PEN", "FINISHED", "AWARDED"}
 def _sm_get(path: str, params: dict) -> dict:
     params["api_token"] = _TOKEN
     url = f"{_BASE}/{path}?{urllib.parse.urlencode(params)}"
-    with urllib.request.urlopen(urllib.request.Request(url), timeout=15) as r:
+    # Sportmonks blocks the default Python-urllib UA with HTTP 403 — must send
+    # an explicit User-Agent (same fix as fetch_upcoming/refresh_odds/refresh_stats/
+    # fetch_results, 2026-06-08). Missing here caused livescores_poller to 403 for ~7d.
+    req = urllib.request.Request(url, headers={"User-Agent": "OddsFlowV4/1.0"})
+    with urllib.request.urlopen(req, timeout=15) as r:
         return json.loads(r.read())
 
 
