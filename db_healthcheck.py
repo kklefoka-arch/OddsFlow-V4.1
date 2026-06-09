@@ -31,7 +31,8 @@ def _health(conn, value):
 def main():
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     try:
-        conn = sqlite3.connect(DB)
+        conn = sqlite3.connect(DB, timeout=30)
+        conn.execute("PRAGMA busy_timeout=30000")  # wait for the live server's locks
     except Exception as e:
         print(f"FATAL: cannot open DB: {e}")
         return

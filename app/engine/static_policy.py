@@ -125,4 +125,42 @@ V3_MARKETS: dict[tuple[str, str], dict[str, Any]] = {
     ("one_sided", "over"): {
         "goals_nl":   {"line": 1.5, "hit": 84.4, "n": 2435, "odd_col": _GL15},
         "corners_nl": {"line": 8.5, "hit": 68.8, "n": 2279, "odd_col": _CL85},
-    
+        "threeway":   {"line": None, "pick": _AOD, "hit": 88.1, "n": 2435, "odd_col": None},
+        "composite": 80.4,
+        "signals": {"spread": "display", "df": "display", "h2h_corner": "display"},
+    },
+    ("one_sided", "under"): {
+        "goals_nl":   {"line": 1.5, "hit": 82.3, "n": 1373, "odd_col": _GL15},
+        "corners_nl": {"line": 8.5, "hit": 65.1, "n": 1175, "odd_col": _CL85},
+        "threeway":   {"line": None, "pick": _AOD, "hit": 94.3, "n": 1373, "odd_col": None},
+        "composite": 80.6,
+        "signals": {"spread": "display", "df": "display", "h2h_corner": "display"},
+    },
+}
+
+V3_ACTIVE: dict[tuple[str, str], dict[str, Any]] = {
+    k: v for k, v in V3_MARKETS.items()
+    if not (LOW_ZONE_SUPPRESS and k[0] == "low")
+}
+
+# Market keys (everything else in a cell dict — composite, signals — is metadata).
+MARKET_KEYS = ("goals_nl", "corners_nl", "threeway")
+
+
+# ---------------------------------------------------------------------------
+# PROMOTED_CELLS — display + inspector metadata (2-key). bts_pocket holds the
+# over/under value (v4 cell axis) for back-compat with route field names.
+# ---------------------------------------------------------------------------
+PROMOTED_CELLS: dict[tuple[str, str], dict[str, Any]] = {}
+for (_z, _b), _cell in V3_ACTIVE.items():
+    _gn, _cn, _tw = _cell["goals_nl"], _cell["corners_nl"], _cell["threeway"]
+    PROMOTED_CELLS[(_z, _b)] = {
+        "zone": _z, "bts_pocket": _b,
+        "cell_promoted": True,
+        "threeway_hit": _tw["hit"], "threeway_pick": _tw["pick"],
+        "gn_hit": _gn["hit"], "cn_hit": _cn["hit"],
+        "n_fixtures": _tw["n"],
+        "composite": _cell["composite"],
+        "promote_status": "PASS",
+        "provisional": False,
+    }

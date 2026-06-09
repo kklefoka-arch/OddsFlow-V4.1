@@ -200,4 +200,4 @@ if updated > 0:
         ).returncode
         print(f"Re-emit chained call returned rc={rc}")
     except Exception as exc:
-    
+        print(f"Re-emit chain failed: {exc}")

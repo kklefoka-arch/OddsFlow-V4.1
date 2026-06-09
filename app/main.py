@@ -1,4 +1,6 @@
 """OddsFlow V4 — FastAPI application entry point."""
+# reload-bump 2026-06-09: force uvicorn --reload to restart the worker and
+# release any stale DB lock held by a wedged request.
 
 from __future__ import annotations
 

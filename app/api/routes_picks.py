@@ -514,4 +514,17 @@ def picks(days: int = Query(3, ge=1, le=14)) -> dict[str, Any]:
 
     return {
         "count":            len(picks_out),
-        
+        "fixtures_count":   len(fixture_ids),
+        "counts_by_class":  {"promote": len(picks_out)},
+        "counts_by_market": counts_by_market,
+        "counts_by_leg":    {"single": len(picks_out)},
+        "counts_by_tier":   counts_by_tier,
+        "window_days":      days,
+        "as_of":            now.isoformat(),
+        "skip_reasons":     skip_reasons,
+        "emit_log":         emit_summary,
+        "picks":            picks_out,
+    }
+
+
+# /picks/prx9 retired (V3 restoration, Session 19) — dead route removed (no frontend caller).

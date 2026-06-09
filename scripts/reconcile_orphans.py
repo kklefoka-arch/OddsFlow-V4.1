@@ -102,7 +102,8 @@ def _mark_orphans(conn: sqlite3.Connection, reason: str, where_sql: str, params:
 
 
 def main() -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.execute("PRAGMA busy_timeout=30000")  # wait for the live server's locks
     conn.row_factory = sqlite3.Row
     try:
         # NOTE: fixtures.league_id is the INTERNAL DB leagues.id, while
@@ -116,4 +117,32 @@ def main() -> None:
         league_count = _mark_orphans(
             conn,
             reason="league_dropped",
-            where_sql=f"COAL
+            where_sql=f"COALESCE(l.sportmonks_id, -1) NOT IN ({league_placeholders})",
+            params=list(active),
+        )
+        # Reason B — kickoff > 48h ago, league still active, but no scores.
+        stale_count = _mark_orphans(
+            conn,
+            reason="stale_no_result",
+            where_sql=(
+                f"l.sportmonks_id IN ({league_placeholders}) "
+                f"AND f.home_score IS NULL "
+                f"AND f.date < datetime('now', '-{ORPHAN_AGE_HOURS} hours')"
+            ),
+            params=list(active),
+        )
+        total = league_count + stale_count
+        _write_health(
+            conn,
+            f"ok: league_dropped={league_count} stale_no_result={stale_count} total={total}",
+        )
+        print(
+            f"reconcile_orphans: league_dropped={league_count} "
+            f"stale_no_result={stale_count} total={total}"
+        )
+    finally:
+        conn.close()
+
+
+if __name__ == "__main__":
+    main()

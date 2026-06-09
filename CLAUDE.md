@@ -115,4 +115,27 @@ Same as before — Task Scheduler runs the 12 jobs from `setup_scheduler.ps1`. M
 - **All API scripts use `User-Agent: OddsFlowV4/1.0`** — Sportmonks blocks `Python-urllib/*`. Fix applied to fetch_upcoming, refresh_odds, refresh_stats, fetch_results (2026-06-08).
 - **Active league source of truth (2026-06-09 — now DB-driven):** the active set lives in DB column `leagues.active`, refreshed from the live Sportmonks `/leagues` endpoint by `sync_leagues.py`. `static_policy.ACTIVE_LEAGUE_SPORTMONKS_IDS`, `fetch_results.py`, and `reconcile_orphans.py` READ that column at runtime (hard-coded snapshot only as fallback). Ends the old "four places to edit, drifts every plan change" problem. `fetch_upcoming.py` keeps a dict (id→tier) — it is the discovery/fetch list and carries the operator's editorial T1/T2/T3 tiers (API has no tier). **Current plan = 28 leagues.** Added 2026-06-09: Ireland First Division 363, Kazakhstan First Division 396, Norway 1. Division 447, K League 2 1362, Finland Ykkönen 3306 (tiers defaulted by pyramid — confirm). Dropped: Bolivia 1098, Ecuador 696, Canada 1689, Lithuania 405, Colombia 678/681, USL League Two 797, La Liga 2 567. Run `sync_leagues.py` after any plan change (now also first step of the daily chain).
 - **fetch_results.py rewritten (2026-06-09):** fetches results BY FIXTURE ID via `fixtures/{id}`, one at a time — replacing the week-window + league-filter version (dropped drifted-league fixtures) and a `fixtures/multi` batch attempt (Sportmonks poisons the whole batch if any id is unsubscribed). Un-returnable fixtures get `status='no_result'` after 5 days so they stop re-appearing; their picks settle as ORPHAN. Startup re-opens `no_result` rows whose league is active again.
-- **reconcile_orphans.py fixed (2026-06-09):** JOINs `leagues` and compares `l.sportmonks_id` (not internal `f.league_id`) to the active set — the old comparison mixed id systems and under-counted dropped-league orphans
+- **reconcile_orphans.py fixed (2026-06-09):** JOINs `leagues` and compares `l.sportmonks_id` (not internal `f.league_id`) to the active set — the old comparison mixed id systems and under-counted dropped-league orphans.
+- **db_healthcheck.py added (2026-06-09):** integrity check + online rotating backup (keep 7) + system_health record, first step of the daily chain. NOTE: the "DB corruption" seen during the 2026-06-09 session was a **sandbox-mount artifact** (live 44 MB DB mirrored as a truncated 15 MB fragment). The real DB on disk is healthy — `integrity_check = ok`, 51,312 fixtures.
+
+## Pending / next
+
+- Monitor V3 + Golden Rule settlement under new boundaries for 6 weeks. Recalibrate baseline hit rates after that.
+- Once recalibrated, decide whether DF should be re-introduced as a partition refinement (or stay an analytical signal). Until then, rule 1 holds.
+- **3-picks-log layer (deferred build):** new SPA tab + `bet_tickets` table per Notes expand 28-05-26. Translates V3 emits into practical multibet / system-bet structures with 72-hour locked windows. All EV / breakeven math lives here, not in the engine. Runs in parallel to the 6-week watch and gives faster feedback on whether the structural edge translates to +EV at bookmaker prices.
+- Project 3 (live odds comparison vs breakeven) stays in draft in the AI Website folder. Build only after Project 1 validates under the new boundaries.
+- `low:strong_under` (n=18) remains deferred — re-evaluate after 6-week post-overlay settlement when sample grows. All other "high BTS" cells (low:strong_over, one_sided:strong_over, one_sided:strong_under) added Session 19+ per operator clarification.
+
+## Reference documents
+
+| Doc | Contents |
+|-----|----------|
+| `context/01_project_overview.md` | What / who / why (V3 + overlay) |
+| `context/02_league_config.md` | 30 leagues, tier assignments |
+| `context/03_engine_rules.md` | Classification (zone × bts) + V3 policy + new boundaries |
+| `context/04_current_status.md` | Current state, known issues, session log |
+| `context/05_architecture.md` | File map, process flow, API routes, DB tables |
+| `context/06_process_flow.md` | Full fixture lifecycle |
+| `context/07_system_language.md` | Every term defined; what exists vs what does not |
+| `context/engine_knowledge.md` | Tabs + abbreviations + operating notes |
+| `context/arch

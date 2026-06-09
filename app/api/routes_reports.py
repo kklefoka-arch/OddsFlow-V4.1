@@ -615,4 +615,5 @@ def paper_trading_csv(
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attac
+        headers={"Content-Disposition": f'attachment; filename="oddsflow_picks_{today}.csv"'},
+    )

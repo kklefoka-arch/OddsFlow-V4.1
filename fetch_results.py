@@ -120,12 +120,14 @@ def extract_corners(stats_list: list, home_p_id, away_p_id) -> tuple[int | None,
 
 
 def main() -> None:
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect(DB, timeout=30)
+    conn.execute("PRAGMA busy_timeout=30000")  # wait for the live server's locks
     conn.row_factory = sqlite3.Row
     now_utc = datetime.now(timezone.utc)
     today   = now_utc.strftime("%Y-%m-%d")
     now_ts  = now_utc.strftime("%Y-%m-%d %H:%M:%S")
-    active_csv = ",".join(str(i) for i in load_active_sm(conn))
+    active = load_active_sm(conn)
+    active_csv = ",".join(str(i) for i in active)
 
     # Self-heal: re-open fixtures previously given up on whose league is active
     # again (e.g. 797 re-added). Removed leagues stay no_result.
@@ -147,8 +149,9 @@ def main() -> None:
           AND f.sportmonks_id IS NOT NULL
           AND substr(f.date, 1, 10) < ?
           AND COALESCE(f.status, '') <> 'no_result'
+          AND l.sportmonks_id IN ({active_csv})
         ORDER BY f.date ASC
-    """, (today,)).fetchall()
+    """.format(active_csv=active_csv), (today,)).fetchall()
 
     print(f"Unsettled fixtures eligible for result fetch: {len(unsettled)}")
     if not unsettled:
@@ -228,3 +231,23 @@ def main() -> None:
 
     conn.execute("INSERT INTO system_health (metric, value) VALUES (?, ?)",
                  ("fetch_results",
+                  f"ok: {updated} scores, {inserted_stats} stats, "
+                  f"{not_finished} not_finished, {no_data} no_data, {giveup} no_result"))
+    conn.commit()
+    conn.close()
+
+    print("\nDone")
+    print(f"  Scores written:            {updated}")
+    print(f"  Corner stats written:      {inserted_stats}")
+    print(f"  Played, not finished yet:  {not_finished}")
+    print(f"  API returned no fixture:   {no_data}  (marked no_result: {giveup})")
+    print("\n  By league (settled / no_data):")
+    for name in sorted(by_league):
+        s, n = by_league[name]
+        print(f"    {name:<32} settled={s:<4} no_data={n}")
+    if updated > 0:
+        print("\nNext step: run  python settle.py  to write pick_results from emit_log.")
+
+
+if __name__ == "__main__":
+    main()

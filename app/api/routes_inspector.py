@@ -435,4 +435,3 @@ def daily_calendar(
         "end_date":    today_date.strftime("%Y-%m-%d"),
         "days":        days_out,
     }
-                               

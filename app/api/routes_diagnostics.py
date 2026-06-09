@@ -571,4 +571,30 @@ def activity_by_tier(days: int = Query(7, ge=1, le=365)) -> dict[str, Any]:
     }
 
 
-# ------------------------------------
+# ---------------------------------------------------------------------------
+# GET /healthz/deep  (health badge in the SPA)
+# ---------------------------------------------------------------------------
+
+@router.get("/healthz_deep", include_in_schema=False)
+def healthz_deep_alias() -> dict[str, Any]:
+    return _healthz_deep_impl()
+
+
+def _healthz_deep_impl() -> dict[str, Any]:
+    from app.settings import settings as _s
+    conn = get_conn(_s.sqlite_path)
+    try:
+        fx_count = _safe_count(conn, "fixtures") or 0
+        emit_count = _safe_count(conn, "emit_log") or 0
+    finally:
+        conn.close()
+
+    env = getattr(settings, "app_env", "local")
+    return {
+        "status": "ok",
+        "env":    env,
+        "db": {
+            "fixtures": fx_count,
+            "emit_log": emit_count,
+        },
+    }

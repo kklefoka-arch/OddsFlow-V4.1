@@ -51,7 +51,8 @@ def main():
         country = (l.get("country") or {}).get("name", "?")
         print(f"   {l['id']:>6}  {country:<22} {l.get('name')}")
 
-    conn = sqlite3.connect(DB); conn.row_factory = sqlite3.Row
+    conn = sqlite3.connect(DB, timeout=30); conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=30000")  # wait for the live server's locks
     cols = [r[1] for r in conn.execute("PRAGMA table_info(leagues)")]
     if "active" not in cols:
         conn.execute("ALTER TABLE leagues ADD COLUMN active INTEGER DEFAULT 0")
@@ -65,6 +66,12 @@ def main():
         "SELECT sportmonks_id FROM leagues WHERE sportmonks_id IS NOT NULL")}
     name_col = "name" if "name" in cols else None
     country_col = next((c for c in ("country", "country_name") if c in cols), None)
+    has_tier = "tier" in cols
+    # tier is editorial (API has none); pull from fetch_upcoming's map, else 3.
+    try:
+        from fetch_upcoming import ACTIVE_LEAGUES as _TIER_MAP
+    except Exception:
+        _TIER_MAP = {}
     inserted_new = 0
     for l in leagues:
         smid = int(l["id"])
@@ -75,6 +82,8 @@ def main():
             fields.append(name_col); vals.append(l.get("name"))
         if country_col:
             fields.append(country_col); vals.append((l.get("country") or {}).get("name"))
+        if has_tier:
+            fields.append("tier"); vals.append(int(_TIER_MAP.get(smid, 3)))
         ph = ",".join("?" * len(vals))
         try:
             conn.execute(f"INSERT INTO leagues ({','.join(fields)}) VALUES ({ph})", vals)

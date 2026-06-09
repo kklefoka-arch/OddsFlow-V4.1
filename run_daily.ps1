@@ -34,4 +34,12 @@ python scripts/reconcile_orphans.py 2>&1 | Tee-Object -FilePath "$logDir\reconci
 Write-Host "`n=== heartbeat ===" -ForegroundColor Cyan
 python -c "
 import sqlite3, datetime
-conn = sqlite3.conn
+conn = sqlite3.connect(r'C:\OddsFlowV4\data\oddsflow_v4.db')
+now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+conn.execute('INSERT INTO system_health (metric, value) VALUES (?, ?)', ('cron_heartbeat', f'step=complete ts={now}'))
+conn.commit()
+conn.close()
+print('Heartbeat written.')
+"
+
+Write-Host "`n=== done ===" -ForegroundColor Green

@@ -292,4 +292,13 @@ for fx in fixtures:
             home_team.get("name"), away_team.get("name"),
             home_odd, draw_odd, away_odd, btts_yes, btts_no,
             g15, g25, g35, c75, c85, c95,
-            fx_zone, fx_bts, now_ts, now_ts, now_ts, json.dumps(fx.ge
+            fx_zone, fx_bts, now_ts, now_ts, now_ts, json.dumps(fx.get("odds") or []),
+        ))
+        inserted += 1
+
+conn.execute(
+    "INSERT INTO system_health (metric, value) VALUES ('fetch_upcoming', 'ok')",
+)
+conn.commit()
+conn.close()
+print(f"\nDone — inserted={inserted}  updated={updated}  skipped={skipped}")

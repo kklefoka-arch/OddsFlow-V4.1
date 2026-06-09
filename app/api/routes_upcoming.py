@@ -115,4 +115,12 @@ def upcoming(
             "partition_promoted": partition_promoted,
         })
 
-    r
+    return {
+        "count": len(data),
+        "window_days": days,
+        "summary": {
+            "by_tier": by_tier,
+            "partition_promoted": promoted_count,
+        },
+        "data": data,
+    }
