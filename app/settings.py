@@ -40,8 +40,14 @@ class Settings(BaseSettings):
         "emit_picks_reemit":       30.0,
         "refresh_odds":            26.0,
         "refresh_stats":           36.0,
-        "fetch_results":            8.0,
-        "settle":                   8.0,
+        "fetch_results":           18.0,   # 18h — runs 03:00/06:00/23:30 SAST;
+                                           # largest normal gap is 06:00->23:30
+                                           # (~17.5h), so 8h flagged red every
+                                           # afternoon. 18h still catches a
+                                           # missed evening run by ~midnight.
+        "settle":                   8.0,   # stays fresh via livescores poller
+                                           # auto-settle (every 5 min), so the
+                                           # 8h gap never actually trips.
         "reconcile_orphans":       30.0,
         "sportmonks_webhook":       6.0,
         "livescores_poller":        0.5,   # 30 min — poller runs every 5 min

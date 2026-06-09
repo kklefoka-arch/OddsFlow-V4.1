@@ -1,6 +1,6 @@
 # OddsFlow V4 — Operator Manual
 
-**Operator:** Katlego (KK) | **Port:** 8083 | **Updated:** 2026-06-08
+**Operator:** Katlego (KK) | **Port:** 8083 | **Updated:** 2026-06-09
 
 ---
 
@@ -189,7 +189,7 @@ System health dashboard. Refreshes every 60s.
 - **Last clean run chip** — age of last full clean pipeline run (green ≤26h, orange ≤48h, red >48h)
 - **Chain chip** — verified/BROKEN — confirms fetch_upcoming → emit_picks data chain is intact
 - **Drift chip** — quick partition stability summary
-- **Runbook strip** — per-task overdue status for all 8 scheduled tasks
+- **Runbook strip** — per-task overdue status for all 12 pipeline metrics (see §8 for what each one means and how to fix a red badge)
 
 ### Stats
 Deep system stats: DB table counts, cron heartbeat, odds coverage per league, drift report detail.
@@ -220,8 +220,14 @@ The pipeline runs automatically via Task Scheduler. All scripts are in `C:\OddsF
 ```powershell
 cd C:\OddsFlowV4
 .\run_daily.ps1
-# Runs: fetch_upcoming → emit_picks → fetch_results → settle
+# Runs (in order): db_healthcheck → sync_leagues → fetch_upcoming →
+#                  emit_picks → fetch_results → settle → reconcile_orphans
 ```
+
+Or double-click **`run_daily.bat`** in `C:\OddsFlowV4` — it opens a command
+window, runs the same chain, and pauses on a tail of the log so you can read
+the result. (A `.py` file double-clicked just opens in the editor — it does
+**not** run. Always use the `.bat`, or a terminal.)
 
 Or run individual scripts:
 ```powershell
@@ -275,17 +281,23 @@ Threeway: binary — wins ÷ settled. A draw is a WIN (no void, stake never retu
 
 ---
 
-## 5. Leagues (29 active)
+## 5. Leagues (28 active)
 
-Full list in `context/02_league_config.md`. Summary:
+Full list in `context/02_league_config.md`. Tier split is the operator's
+editorial call (the Sportmonks API has no tier field).
 
-- **T1** (16 leagues) — top flight of each country: Allsvenskan, Eliteserien, MLS, Brazil Serie A, J1, K League 1, etc.
-- **T2** (6 leagues) — Superettan, USL Championship, Colombia Primera B, Ykköseliga, Esiliiga A, J2/J3
-- **T3** (7 leagues) — Reserve leagues, cups, lower tiers
+Big 5 EU (PL, Ligue 1, La Liga, Serie A, La Liga 2) are **not** in the
+subscription. Dropped 2026-06-09: Bolivia, Ecuador, Canada, Lithuania,
+Colombia, USL League Two, La Liga 2. Added 2026-06-09: Ireland First Division,
+Kazakhstan First Division, Norway 1. Division, K League 2, Finland Ykkönen.
 
-Big 5 EU (PL, Ligue 1, La Liga, Serie A, La Liga 2) are **not** in the subscription. USL League Two (797) removed 2026-05-29.
-
-Source of truth: `ACTIVE_LEAGUES` dict in `fetch_upcoming.py`.
+**Source of truth (changed 2026-06-09):** the active set now lives in the DB
+column **`leagues.active`**, refreshed from the live Sportmonks `/leagues`
+endpoint by **`sync_leagues.py`** (first step of the daily chain). The routes,
+`fetch_results.py`, and `reconcile_orphans.py` all READ that column at runtime.
+`fetch_upcoming.py` still keeps an `ACTIVE_LEAGUES` dict (id → tier) as the
+discovery/fetch list and tier source. **Run `sync_leagues.py` after any plan
+change** (or just run the daily chain, which calls it first).
 
 ---
 
@@ -321,4 +333,109 @@ All endpoints prefixed with `http://localhost:8083`. Full list at `/docs`.
 | `GET /upcoming?days=N&tier=T` | All classified upcoming fixtures |
 | `GET /api/foundation` | Foundation matrix JSON (all/t1t2/t3) |
 | `GET /inspector/partition_drift?recent_days=N` | Drift vs historical per promoted cell |
-| `GET /inspector/similar?zone=Z&bts=B
+| `GET /inspector/similar?zone=Z&bts=B` | Past fixtures in the same cell |
+| `GET /api/results?days=N` | Settled fixtures + live auto-settle |
+| `GET /api/livescores` | Sportmonks in-play proxy (auto-settles finished games) |
+| `GET /diagnostics/runbook` | Per-task overdue status (powers the Today strip) |
+| `GET /diagnostics/today_summary` | The Today tab headline numbers |
+| `GET /reports/emit_market_breakdown?days=N` | Per-market hit rates |
+
+---
+
+## 8. Reading the Runbook (Today tab) — every task explained
+
+The Today tab's **Runbook strip** has one badge per pipeline task. **Green = ran
+OK within its window. Red = overdue** (no successful "ok" heartbeat inside the
+threshold). Each task writes a heartbeat to the `system_health` table when it
+runs; the runbook reads the most recent one.
+
+| Badge | Threshold | Runs (SAST) | What it does | If RED, run |
+|-------|-----------|-------------|--------------|-------------|
+| `fetch_upcoming` | 26h | 08:00 | Pull fixtures + pre-match odds | `python fetch_upcoming.py` |
+| `emit_picks` | 26h | 08:05 | Emit picks for next 3 days | `python emit_picks.py --mode emit` |
+| `emit_picks_reemit` | 30h | 14:30 | Re-emit after intraday odds refresh | `python emit_picks.py --mode reemit` |
+| `refresh_odds` | 26h | 14:30 | Re-fetch odds for next-30h fixtures | `python refresh_odds.py` |
+| `refresh_stats` | 36h | 00:00 | Backfill corner stats (14d) | `python refresh_stats.py` |
+| `fetch_results` | 18h | 03:00·06:00·23:30 | Pull final scores + stats | `python fetch_results.py` |
+| `settle` | 8h | 03:15·06:15·23:45 | Write WIN/LOSS to pick_results | `python settle.py` |
+| `reconcile_orphans` | 30h | nightly | Mark dropped-league picks ORPHAN | `python scripts/reconcile_orphans.py` |
+| `livescores_poller` | 0.5h | every 5 min | Live in-play scores → auto-settle | (scheduled task `OddsFlow_LivescoresPoller`) |
+| `db_maintenance` | 8d | Sun 02:00 | Integrity check + backup | `python scripts/db_maintenance.py` |
+| `emit_partition_invalid` | 7d | on each emit | Counts picks rejected by the cell-boundary guard. `ok: rejected=0` is healthy | clears on next emit |
+| `sportmonks_webhook` | 6h | (disabled) | Webhook receiver — off by default; ignore unless you enable it | — |
+
+**Reading the heartbeat value:** each badge's text is the last heartbeat, e.g.
+`ok: livescores=2 auto_written=0 auto_settled=0` (poller saw 2 in-play games,
+no finished ones to settle) or `ok: 13 scores, 13 stats` (fetch_results pulled
+13 results). A value starting `error:` is the last failure — informational; the
+badge only goes red when no `ok` beat exists inside the threshold window.
+
+---
+
+## 9. Troubleshooting
+
+### A task badge is red
+1. Open a terminal in the folder (`cd C:\OddsFlowV4`).
+2. Run the task's command from the §8 table.
+3. Re-open the Today tab — the badge should go green within ~60s.
+If several are red at once, the **scheduler** likely isn't running — check
+Task Scheduler (`taskschd.msc`) for the `OddsFlow_*` tasks (Status = Ready,
+Last Run Result = 0x0).
+
+### Sportmonks returns HTTP 403 Forbidden
+Sportmonks **blocks the default Python user-agent**. Every script that calls the
+API must send `headers={"User-Agent": "OddsFlowV4/1.0"}`. If a *new* API call is
+added and it 403s, that header is missing. Fixed call sites: `fetch_upcoming`,
+`refresh_odds`, `refresh_stats`, `fetch_results`, `sync_leagues`,
+`routes_results.py` (livescores), `routes_webhooks.py`, `scripts/fetch_historical.py`.
+
+### Restarting the server (and deploying code changes)
+The server runs **elevated** (Task Scheduler `OddsFlow_Server`, `-RunLevel
+Highest`), so a normal double-click of `restart_server.bat` can't kill it. To
+restart: **right-click `restart_server.bat` → Run as administrator** → approve
+the prompt. It kills the old uvicorn and relaunches via `start_server.ps1` with
+`--reload`. Once it's running with `--reload`, **edits to `.py` files auto-apply
+within ~1s** — no further restart needed. (A full reboot also works: the startup
+task relaunches the server on current code.)
+
+### Live scores aren't settling
+Check the `livescores_poller` badge on Today. If red with an `HTTP 403` error,
+it's the user-agent bug above in `routes_results.py`'s `_sm_get`. If red with
+`getaddrinfo failed`, that's a transient DNS/network blip — it self-recovers.
+
+### A `.py` file opens in VS Code instead of running
+That's the file association — `.py` opens in the editor when double-clicked. To
+*run* something, use the matching `.bat` (e.g. `run_daily.bat`,
+`run_syncleagues.bat`) or run `python <script>.py` from a terminal.
+
+### Git "lock file already exists" when committing
+A stale `C:\OddsFlowV4\.git\index.lock` from an interrupted git command. Delete
+that one file (paste `C:\OddsFlowV4\.git` into File Explorer's address bar →
+delete `index.lock`) and retry.
+
+---
+
+## 10. Glossary — terms & abbreviations
+
+| Term | Meaning |
+|------|---------|
+| **zone** | draw_odd band: strong / standard / low / one_sided (see §4) |
+| **bts** | both-teams-to-score direction. `over` = market expects both to score (yes_odd ≤ no_odd); `under` = opposite |
+| **cell / partition** | the `(zone, bts)` pair a fixture falls into — the 8 active cells are the engine |
+| **PROMOTE** | the fixture's cell is one of the 8 live policy cells (it fires picks) |
+| **goals_nl / corners_nl** | "natural line" over markets: O1.5 goals; O7.5 (strong) / O8.5 corners |
+| **threeway** | the 1X2 pick, as **alpha-or-draw** — favourite OR draw both count as a WIN |
+| **alpha** | the market favourite (lower of home/away odd) |
+| **DF** | a draw-favouritism signal (DF0/1/2). Display-only — never a cell axis |
+| **H2H corner** | over/under/none from our own prior meetings of the two teams |
+| **drift** | recent cell hit rate vs its historical rate. watch = 5–10pp below, drifting = >10pp |
+| **ORPHAN** | a pick whose league/fixture was dropped — excluded from hit rate |
+| **emit** | the act of writing picks to `emit_log` (what `emit_picks.py` does) |
+| **settle** | reading final scores and writing WIN/LOSS to `pick_results` |
+| **T1 / T2 / T3** | operator tier of the league (editorial; not from the API) |
+
+---
+
+*Last updated 2026-06-09 (Session 20): fetch_results runbook threshold 8h→18h;
+livescores 403 fix; leagues 29→28 + DB-driven active set; added Runbook
+reference (§8), Troubleshooting (§9), and Glossary (§10).*
