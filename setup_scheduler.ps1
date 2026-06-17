@@ -79,9 +79,16 @@ Register-OddsFlowTask "OddsFlow_ReconcileOrphans" "scripts/reconcile_orphans.py"
 $lsAction    = New-ScheduledTaskAction -Execute $python `
                   -Argument "scripts/livescores_poller.py" `
                   -WorkingDirectory $workdir
-$lsTrigger   = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+# Robust trigger (fixed 2026-06-15): a single -Once trigger's 5-min repetition
+# does NOT reliably resume after the PC is off for a day (the poller silently
+# stopped 2026-06-13 -> 2026-06-15 after an off-day). Use a DAILY trigger that
+# RE-ARMS the 5-min repetition every day, plus an AtStartup trigger. With
+# -StartWhenAvailable below, the poller always recovers after any downtime.
+$lsDaily = New-ScheduledTaskTrigger -Daily -At 00:02
+$lsDaily.Repetition = (New-ScheduledTaskTrigger -Once -At 00:02 `
                   -RepetitionInterval (New-TimeSpan -Minutes 5) `
-                  -RepetitionDuration (New-TimeSpan -Days 3650)
+                  -RepetitionDuration (New-TimeSpan -Hours 23 -Minutes 58)).Repetition
+$lsTrigger   = @($lsDaily, (New-ScheduledTaskTrigger -AtStartup))
 $lsSettings  = New-ScheduledTaskSettingsSet `
                   -ExecutionTimeLimit (New-TimeSpan -Minutes 4) `
                   -MultipleInstances IgnoreNew `
