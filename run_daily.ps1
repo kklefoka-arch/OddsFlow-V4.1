@@ -19,6 +19,9 @@ python sync_leagues.py 2>&1 | Tee-Object -FilePath "$logDir\sync_leagues_$stamp.
 Write-Host "`n=== fetch_upcoming ===" -ForegroundColor Cyan
 python fetch_upcoming.py 2>&1 | Tee-Object -FilePath "$logDir\fetch_upcoming_$stamp.log"
 
+Write-Host "`n=== rederive odds (correct goals mkt80 / corners mkt67, over+under) ===" -ForegroundColor Cyan
+python scripts\rederive_odds.py 2>&1 | Tee-Object -FilePath "$logDir\rederive_odds_$stamp.log"
+
 Write-Host "`n=== emit picks (morning) ===" -ForegroundColor Cyan
 python emit_picks.py --mode emit 2>&1 | Tee-Object -FilePath "$logDir\emit_picks_$stamp.log"
 

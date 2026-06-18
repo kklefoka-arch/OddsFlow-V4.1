@@ -302,3 +302,12 @@ conn.execute(
 conn.commit()
 conn.close()
 print(f"\nDone — inserted={inserted}  updated={updated}  skipped={skipped}")
+
+# Re-derive correct goals(mkt80)/corners(mkt67) over+under odds from the raw JSON
+# just stored. The inline parser above still fills the legacy columns; this proven
+# post-step fills the corrected odds. Guarded — never breaks the fetch.
+try:
+    import subprocess as _sp, sys as _sys, os as _os
+    _sp.run([_sys.executable, _os.path.join("scripts", "rederive_odds.py")], timeout=600)
+except Exception as _e:
+    print("rederive_odds post-step skipped:", _e)
