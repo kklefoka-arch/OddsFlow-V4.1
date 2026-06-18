@@ -1546,6 +1546,22 @@ async function loadInspectorDrift(days) {
 // ---- Picks Log (advanced three-picks layer — legs only, v1) ----
 // Derives Most-likely / Mean / Optimistic configs from the ground-zero natural
 // emits (/picks). No EV / odds combination yet — structures only (golden rule).
+// Validated signal overlays (pp deltas) — see analysis/ (spread + DF validation, 2026-06-18).
+// spread(strong) lifts goals/corners & drops 3-way in over-cells; DF2 lifts the 3-way.
+const PL_DELTAS = {
+  spread: {  // applied to goals(g)/corners(c)/threeway(t) only when spread === 'strong'
+    'standard:over':  { g: +7.0, c: +4.5, t: -6.0 },
+    'low:over':       { g: +5.5, c: +6.3, t: -7.5 },
+    'one_sided:over': { g: +5.8, c: -2.7, t: -6.2 },
+  },
+  df: {      // applied to threeway only, by DF level, in cells where DF varies
+    'standard:over': { DF0: -7.4, DF1: -2.8, DF2: +5.5 },
+    'strong:under':  { DF0: -7.4, DF1: -2.9, DF2: +5.6 },
+    'strong:over':   { DF0: -4.8, DF1: +0.7, DF2: +4.3 },
+  },
+};
+const PL_BAR = 70.0;   // a market must clear this signal-adjusted hit% to be listed
+
 async function loadPicksLog() {
   const summary = document.getElementById('pickslog-summary');
   const list = document.getElementById('pickslog-list');
@@ -1561,44 +1577,55 @@ async function loadPicksLog() {
       if (!byFix.has(p.fixture_id)) byFix.set(p.fixture_id, { info: p, legs: {} });
       byFix.get(p.fixture_id).legs[p.market] = p;
     }
-    summary.innerHTML =
-      `<div class="summary-item"><span class="summary-label">Fixtures</span><span class="summary-value">${byFix.size}</span></div>
-       <div class="summary-item"><span class="summary-label">Window</span><span class="summary-value">${days}d</span></div>`;
-    if (!byFix.size) { list.innerHTML = '<div class="empty">No ground-zero picks in window.</div>'; return; }
-
-    const ln = (base, add) => (base != null ? `O${(base + add).toFixed(1)}` : '—');
     const kdt = s => (s || '').replace('T', ' ').slice(0, 16);
-    const colStyle = 'border:1px solid #2a3344;border-radius:6px;padding:6px 8px';
-    const cards = [];
+    const lad = (ln) => `O${ln.toFixed(1)} · O${(ln + 1).toFixed(1)} · O${(ln + 2).toFixed(1)}`;
+    let shown = 0;
+    const blocks = [];
     for (const { info, legs } of byFix.values()) {
-      const g = legs.goals_nl, c = legs.corners_nl, t = legs.threeway;
-      const gNat = g ? g.line : null;
-      const cNat = c ? c.line : null;
-      const alpha = t ? String(t.pick || '').replace(/ or Draw$/, '') : 'Favourite';
-      const col = (title, gAdd, cAdd, tw, note) => `
-        <div style="${colStyle}">
-          <div style="font-weight:700;margin-bottom:4px">${title}</div>
-          <div>Goals ${ln(gNat, gAdd)}</div>
-          <div>Corners ${cNat != null ? ln(cNat, cAdd) : '<span class="muted">—</span>'}</div>
-          <div>${tw}</div>
-          <div class="muted" style="font-size:0.74em;margin-top:4px">${note}</div>
-        </div>`;
+      const cell = info.partition_key || '';
+      const strong = info.spread === 'strong';
+      const sd = PL_DELTAS.spread[cell] || {};
+      const dd = PL_DELTAS.df[cell] || {};
+      const rows = [];
+      const G = legs.goals_nl, C = legs.corners_nl, T = legs.threeway;
+      if (G && G.cell_historical_hit != null)
+        rows.push({ mkt: 'Goals', adj: G.cell_historical_hit + (strong ? (sd.g || 0) : 0),
+                    n: G.cell_historical_n, ladder: lad(G.line) });
+      if (C && C.cell_historical_hit != null)
+        rows.push({ mkt: 'Corners', adj: C.cell_historical_hit + (strong ? (sd.c || 0) : 0),
+                    n: C.cell_historical_n, ladder: lad(C.line) });
+      if (T && T.cell_historical_hit != null) {
+        const alpha = String(T.pick || '').replace(/ or Draw$/, '');
+        rows.push({ mkt: '3-Way', adj: T.cell_historical_hit + (dd[info.df] || 0),
+                    n: T.cell_historical_n, ladder: `${alpha} or Draw · ${alpha} or Draw · ${alpha} win` });
+      }
+      rows.sort((a, b) => b.adj - a.adj);
+      const qual = rows.filter(r => r.adj >= PL_BAR);
+      const toShow = qual.length ? qual : rows.slice(0, 1);
+      if (!toShow.length) continue;
+      shown++;
+      const spChip = info.spread ? `<span class="chip muted">spread ${info.spread}</span>` : '';
       const dfChip = info.df ? `<span class="chip muted">${info.df}</span>` : '';
-      const h2hChip = (info.h2h_corner && info.h2h_corner !== 'none')
-        ? `<span class="chip muted">h2h ${info.h2h_corner}</span>` : '';
-      cards.push(`
-        <div class="card">
+      const rowHtml = toShow.map((r, i) => `
+        <div style="display:flex;gap:12px;align-items:baseline;padding:3px 0;${i === 0 ? 'font-weight:700' : ''}">
+          <span style="min-width:70px">${i === 0 ? '★ ' : ''}${r.mkt}</span>
+          <span style="min-width:130px">${r.adj.toFixed(1)}%${r.n ? ` <span class="muted" style="font-weight:400">(n=${r.n})</span>` : ''}</span>
+          <span class="muted" style="font-weight:400;font-size:0.85em">${r.ladder}</span>
+        </div>`).join('');
+      blocks.push(`
+        <div class="card" style="padding:8px 10px">
           <div><strong>${info.home_team || ''} vs ${info.away_team || ''}</strong>
-            <span class="chip">${info.partition_key || ''}</span> ${dfChip} ${h2hChip}</div>
-          <div class="muted" style="margin:2px 0 6px">${info.league || ''} · ${kdt(info.kickoff_utc)}</div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-            ${col('Most-likely', 0, 0, `${alpha} or Draw`, 'protected · draw void / stake returned · accumulator')}
-            ${col('Mean', 1, 1, `${alpha} or Draw`, '1-up · system bet (e.g. 6-of-9)')}
-            ${col('Optimistic', 2, 2, `${alpha} win`, '2-up · straight win · system (3-of-6)')}
-          </div>
+            <span class="chip">${cell}</span> <span class="chip muted">T${info.tier || '?'}</span> ${spChip} ${dfChip}</div>
+          <div class="muted" style="margin:2px 0 4px">${info.league || ''} · ${kdt(info.kickoff_utc)}</div>
+          <div class="muted" style="font-size:0.74em;margin-bottom:3px">market · signal-adj hit · lines: Most-likely / Standard / Optimistic</div>
+          ${rowHtml}
         </div>`);
     }
-    list.innerHTML = cards.join('');
+    summary.innerHTML =
+      `<div class="summary-item"><span class="summary-label">Fixtures shown</span><span class="summary-value">${shown}</span></div>
+       <div class="summary-item"><span class="summary-label">Window</span><span class="summary-value">${days}d</span></div>
+       <div class="summary-item"><span class="summary-label">Bar</span><span class="summary-value">${PL_BAR}%</span></div>`;
+    list.innerHTML = blocks.length ? blocks.join('') : '<div class="empty">No markets clear the bar in window.</div>';
   } catch (e) {
     list.innerHTML = `<div class="empty">Error: ${e}</div>`;
   }
