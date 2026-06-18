@@ -444,13 +444,19 @@ def picks(days: int = Query(3, ge=1, le=14)) -> dict[str, Any]:
                 else:
                     continue
 
-                # v4 goals-override (signal, not a cell): in standard:over / low:over,
-                # when spread==strong the goals leg carries the strong-spread rate.
+                # LIVE growing baseline (app/engine/live_baseline) — grows with every
+                # newly settled fixture; falls back to the frozen V3_MARKETS value if the
+                # live compute is unavailable or too thin. The old goals-override is retired:
+                # signal adjustment now lives solely in the Picks Log overlay (no double-count).
                 hist_hit = mkt_cfg["hit"]
-                if market == "goals_nl":
-                    _sp = cell_signals.get("spread")
-                    if isinstance(_sp, dict) and spread == _sp.get("goals_override_on"):
-                        hist_hit = _sp.get("goals_hit", hist_hit)
+                hist_n   = mkt_cfg["n"]
+                try:
+                    from app.engine.live_baseline import live_cell_hit
+                    _lv = live_cell_hit(settings.sqlite_path, zone, bts, market)
+                    if _lv:
+                        hist_hit, hist_n = _lv
+                except Exception:
+                    pass
 
                 picks_out.append({
                     "fixture_id":               d["id"],
@@ -479,7 +485,7 @@ def picks(days: int = Query(3, ge=1, le=14)) -> dict[str, Any]:
                     "cell_drift_gap_pp":        drift["gap_pp"],
                     "cell_drift_recent_n":      drift["recent_n"],
                     "cell_historical_hit":      hist_hit,
-                    "cell_historical_n":        mkt_cfg["n"],
+                    "cell_historical_n":        hist_n,
                     "asian_alternative":        None,
                     "asian_corners_alternative": None,
                 })
