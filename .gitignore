@@ -21,13 +21,20 @@ logs/*.log
 # Graphify outputs
 graphify-out/
 
-# Personal / workspace junk
+# Personal / workspace junk (ignored everywhere...
 *.docx
 *.pdf
+*.jpg
+*.jpeg
+*.png
 bluetooth_content_share.html
 
-# Archives (large zips — stored locally only)
-archive/*.zip
+# ...EXCEPT notes/ — we DO back these up to GitHub so they can't be lost again
+!notes/
+!notes/**
+
+# Archive folder = clutter moved aside, never tracked
+archive/
 
 # OS
 .DS_Store
