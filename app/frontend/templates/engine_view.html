@@ -54,16 +54,17 @@
   <!-- ============ PICKS LOG (advanced three-picks layer — legs only, v1) ============ -->
   <section id="pickslog" class="panel">
     <div class="panel-header">
-      <h2>Picks Log <span class="muted" style="font-size:0.8em">— advanced layer (72h)</span></h2>
+      <h2>Picks Log <span class="muted" style="font-size:0.8em">— advanced layer (multi-market)</span></h2>
       <div class="controls">
         <label>Days: <input type="number" id="pickslog-days" value="3" min="1" max="3"></label>
         <button id="pickslog-refresh">Refresh</button>
       </div>
     </div>
-    <p class="muted">Built on the back of the ground-zero natural emits (golden rule). Three
-      configurations per fixture — <strong>Most-likely</strong> (natural lines, protected:
-      draw void / stake returned), <strong>Mean</strong> (1-up lines, system bets e.g. 6-of-9),
-      <strong>Optimistic</strong> (2-up lines + straight-win, system bets e.g. 3-of-6).
+    <p class="muted">Built on the back of the ground-zero emits. For each fixture it lists
+      <strong>every market</strong> whose signal-adjusted hit rate clears the
+      <strong>72% bar</strong> — the strongest is starred (★). Hit rate is the cell baseline
+      plus validated spread/DF signal deltas. Each market shows its line ladder:
+      <strong>Most-likely / Standard / Optimistic</strong>.
       <em>Legs only (v1) — EV / economic modelling lands here in a later pass.</em></p>
     <div id="pickslog-summary" class="summary"></div>
     <div id="pickslog-list" class="cards"></div>
@@ -244,6 +245,6 @@
   <a href="/healthz" target="_blank" class="muted">/healthz</a>
 </footer>
 
-<script src="/static/engine.js"></script>
+<script src="/static/engine.js?v=20260619b"></script>
 </body>
 </html>
