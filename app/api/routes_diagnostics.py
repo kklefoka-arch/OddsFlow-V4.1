@@ -502,11 +502,10 @@ def drift_report() -> dict[str, Any]:
     now = datetime.now(tz=timezone.utc)
     partitions = [
         {
-            # V3.2 partition_key — 3-part when df present, 2-part fallback for
-            # any legacy rows the drift code surfaces.
-            "partition_key": (
-                f"{r['zone']}:{r['df']}:{r['bts_v2']}" if r.get("df")
-                else f"{r['zone']}:{r['bts_v2']}"
+            # v4 partition_key — per-market: zone:bts:market (drift is computed
+            # per cell × market, each market vs its own baseline).
+            "partition_key": r.get(
+                "partition_key", f"{r['zone']}:{r['bts_v2']}"
             ),
             "class":         "promote",
             "n_current":     r["recent_n"],

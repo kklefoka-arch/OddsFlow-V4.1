@@ -1,0 +1,5 @@
+Testing DB connection...
+DB OK - fixtures count: 51312
+teams sample: [None, None, None]
+SUCCESS
+Exit: 0 

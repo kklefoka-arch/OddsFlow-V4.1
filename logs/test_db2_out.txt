@@ -1,0 +1,8 @@
+START
+DB path: C:\OddsFlowV4\data\oddsflow_v4.db
+DB exists: True
+Connecting...
+Connected OK
+fixtures count: 51312
+teams: [None, None, None]
+SUCCESS

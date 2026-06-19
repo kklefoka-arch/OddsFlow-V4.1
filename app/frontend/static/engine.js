@@ -1506,7 +1506,7 @@ async function loadInspectorDrift(days) {
     tbl.innerHTML = `
       <table>
         <thead><tr>
-          <th>Zone</th><th>BTS</th>
+          <th>Zone</th><th>BTS</th><th>Market</th>
           <th class="numeric">Historical n</th>
           <th class="numeric">Hist hit %</th>
           <th class="numeric">Recent n</th>
@@ -1527,6 +1527,7 @@ async function loadInspectorDrift(days) {
           <tr class="${flagCls}">
             <td>${r.zone}</td>
             <td>${r.bts_v2}</td>
+            <td>${(r.market || '').replace('_nl','').replace('threeway','3-way')}</td>
             <td class="numeric">${fmt.num(r.historical_n)}</td>
             <td class="numeric">${r.historical_hit != null ? r.historical_hit + '%' : '—'}</td>
             <td class="numeric">${fmt.num(r.recent_n)}</td>
@@ -1560,7 +1561,7 @@ const PL_DELTAS = {
     'strong:over':   { DF0: -4.8, DF1: +0.7, DF2: +4.3 },
   },
 };
-const PL_BAR = 70.0;   // a market must clear this signal-adjusted hit% to be listed
+const PL_BAR = 72.0;   // a market must clear this signal-adjusted hit% to be listed (multi-market: ALL that clear show)
 
 async function loadPicksLog() {
   const summary = document.getElementById('pickslog-summary');

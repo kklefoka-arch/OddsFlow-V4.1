@@ -167,6 +167,7 @@ def _compute_cells(rows: list[dict]) -> list[dict[str, Any]]:
                 "gs_green": 0,  # goals system line
                 "cn_green": 0,  # corners natural
                 "cs_green": 0,  # corners system
+                "cn_n": 0,      # fixtures WITH corner data — correct corner denominator
                 "tw_green": 0,  # threeway
             }
 
@@ -182,10 +183,15 @@ def _compute_cells(rows: list[dict]) -> list[dict[str, Any]]:
             cell["gn_green"] += 1
         if _goals_green(row, gs):
             cell["gs_green"] += 1
-        if _corners_green(row, cn):
-            cell["cn_green"] += 1
-        if _corners_green(row, cs):
-            cell["cs_green"] += 1
+        # Corners are only gradeable where stats exist — count them on their own
+        # denominator so missing-stat fixtures don't dilute the rate (alignment fix).
+        if (row.get("total_corners") is not None
+                or (row.get("home_corners") is not None and row.get("away_corners") is not None)):
+            cell["cn_n"] += 1
+            if _corners_green(row, cn):
+                cell["cn_green"] += 1
+            if _corners_green(row, cs):
+                cell["cs_green"] += 1
         if _threeway_green(row, zone):
             cell["tw_green"] += 1
 
@@ -195,10 +201,11 @@ def _compute_cells(rows: list[dict]) -> list[dict[str, Any]]:
 
     for (zone, bts), cell in acc.items():
         n = cell["n"]
+        cn_n = cell["cn_n"]
         gn_hit = _hit_rate(cell["gn_green"], n)
         gs_hit = _hit_rate(cell["gs_green"], n)
-        cn_hit = _hit_rate(cell["cn_green"], n)
-        cs_hit = _hit_rate(cell["cs_green"], n)
+        cn_hit = _hit_rate(cell["cn_green"], cn_n)
+        cs_hit = _hit_rate(cell["cs_green"], cn_n)
         tw_hit = _hit_rate(cell["tw_green"], n)
 
         goals_drop = round(gn_hit - gs_hit, 4)
@@ -208,6 +215,7 @@ def _compute_cells(rows: list[dict]) -> list[dict[str, Any]]:
             "zone": zone,
             "bts_pocket": bts,
             "n_fixtures": n,
+            "n_corners": cn_n,
             "n_pct_of_zone": round(n / total_n * 100, 2) if total_n else 0.0,
             "gn_hit": round(gn_hit, 2),
             "gs_hit": round(gs_hit, 2),

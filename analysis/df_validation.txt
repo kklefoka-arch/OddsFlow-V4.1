@@ -1,0 +1,117 @@
+DF SIGNAL VALIDATION — 2026-06-18 18:19 UTC
+population: 28,847 classifiable settled fixtures
+
+Per cell x market: base rate, then each DF arm's hit / share-of-cell / delta-vs-base.
+(share = arm fixtures / cell fixtures; delta = arm hit - base hit, in pp)
+
+=== strong:over   (cell N = 2982) ===
+  goals    base 71.7% (n=2982)
+      DF0: 70.2%  n=  534  share=17.9%  delta= -1.5pp
+      DF1: 72.4%  n= 2228  share=74.7%  delta= +0.6pp
+      DF2: 69.1%  n=  220  share= 7.4%  delta= -2.6pp
+  corners  base 69.8% (n=2325)
+      DF0: 70.0%  n=  430  share=14.4%  delta= +0.2pp
+      DF1: 70.0%  n= 1721  share=57.7%  delta= +0.2pp
+      DF2: 67.8%  n=  174  share= 5.8%  delta= -2.0pp
+  3way     base 69.4% (n=2982)
+      DF0: 64.6%  n=  534  share=17.9%  delta= -4.8pp
+      DF1: 70.1%  n= 2228  share=74.7%  delta= +0.7pp
+      DF2: 73.6%  n=  220  share= 7.4%  delta= +4.3pp
+
+=== strong:under   (cell N = 4829) ===
+  goals    base 66.8% (n=4829)
+      DF0: 66.7%  n=  607  share=12.6%  delta= -0.0pp
+      DF1: 67.2%  n= 2243  share=46.4%  delta= +0.5pp
+      DF2: 66.2%  n= 1979  share=41.0%  delta= -0.5pp
+  corners  base 67.7% (n=3274)
+      DF0: 68.7%  n=  457  share= 9.5%  delta= +1.1pp
+      DF1: 67.8%  n= 1446  share=29.9%  delta= +0.2pp
+      DF2: 67.1%  n= 1371  share=28.4%  delta= -0.5pp
+  3way     base 74.3% (n=4829)
+      DF0: 66.9%  n=  607  share=12.6%  delta= -7.4pp
+      DF1: 71.4%  n= 2243  share=46.4%  delta= -2.9pp
+      DF2: 79.8%  n= 1979  share=41.0%  delta= +5.6pp
+
+=== standard:over   (cell N = 11108) ===
+  goals    base 77.3% (n=11108)
+      DF0: 76.7%  n=  477  share= 4.3%  delta= -0.6pp
+      DF1: 78.6%  n= 6659  share=59.9%  delta= +1.3pp
+      DF2: 75.2%  n= 3972  share=35.8%  delta= -2.2pp
+  corners  base 64.0% (n=8504)
+      DF0: 60.6%  n=  391  share= 3.5%  delta= -3.4pp
+      DF1: 64.8%  n= 5023  share=45.2%  delta= +0.8pp
+      DF2: 63.1%  n= 3090  share=27.8%  delta= -0.9pp
+  3way     base 72.6% (n=11108)
+      DF0: 65.2%  n=  477  share= 4.3%  delta= -7.4pp
+      DF1: 69.8%  n= 6659  share=59.9%  delta= -2.8pp
+      DF2: 78.1%  n= 3972  share=35.8%  delta= +5.5pp
+
+=== standard:under   (cell N = 2073) ===
+  goals    base 71.7% (n=2073)
+      DF0: -
+      DF1: 69.6%  n=   23  share= 1.1%  delta= -2.1pp  (thin)
+      DF2: 71.7%  n= 2050  share=98.9%  delta= +0.0pp
+  corners  base 56.5% (n=1424)
+      DF0: -
+      DF1: 21.4%  n=   14  share= 0.7%  delta=-35.1pp  (thin)
+      DF2: 56.9%  n= 1410  share=68.0%  delta= +0.3pp
+  3way     base 81.5% (n=2073)
+      DF0: -
+      DF1: 73.9%  n=   23  share= 1.1%  delta= -7.6pp  (thin)
+      DF2: 81.6%  n= 2050  share=98.9%  delta= +0.1pp
+
+=== low:over   (cell N = 3201) ===
+  goals    base 80.9% (n=3201)
+      DF0: 91.7%  n=   24  share= 0.7%  delta=+10.7pp  (thin)
+      DF1: 84.0%  n=  374  share=11.7%  delta= +3.0pp
+      DF2: 80.4%  n= 2803  share=87.6%  delta= -0.5pp
+  corners  base 66.4% (n=2792)
+      DF0: 66.7%  n=   21  share= 0.7%  delta= +0.2pp  (thin)
+      DF1: 71.7%  n=  360  share=11.2%  delta= +5.2pp
+      DF2: 65.7%  n= 2411  share=75.3%  delta= -0.8pp
+  3way     base 79.9% (n=3201)
+      DF0: 54.2%  n=   24  share= 0.7%  delta=-25.7pp  (thin)
+      DF1: 71.4%  n=  374  share=11.7%  delta= -8.5pp
+      DF2: 81.3%  n= 2803  share=87.6%  delta= +1.4pp
+
+=== low:under   (cell N = 805) ===
+  goals    base 71.2% (n=805)
+      DF0: -
+      DF1: -
+      DF2: 71.2%  n=  805  share=100.0%  delta= +0.0pp
+  corners  base 55.5% (n=568)
+      DF0: -
+      DF1: -
+      DF2: 55.5%  n=  568  share=70.6%  delta= +0.0pp
+  3way     base 88.4% (n=805)
+      DF0: -
+      DF1: -
+      DF2: 88.4%  n=  805  share=100.0%  delta= +0.0pp
+
+=== one_sided:over   (cell N = 2467) ===
+  goals    base 84.4% (n=2467)
+      DF0: -
+      DF1: 71.4%  n=    7  share= 0.3%  delta=-13.0pp  (thin)
+      DF2: 84.4%  n= 2460  share=99.7%  delta= +0.0pp
+  corners  base 69.0% (n=2313)
+      DF0: -
+      DF1: 71.4%  n=    7  share= 0.3%  delta= +2.4pp  (thin)
+      DF2: 69.0%  n= 2306  share=93.5%  delta= -0.0pp
+  3way     base 88.2% (n=2467)
+      DF0: -
+      DF1: 57.1%  n=    7  share= 0.3%  delta=-31.0pp  (thin)
+      DF2: 88.3%  n= 2460  share=99.7%  delta= +0.1pp
+
+=== one_sided:under   (cell N = 1382) ===
+  goals    base 82.1% (n=1382)
+      DF0: -
+      DF1: -
+      DF2: 82.1%  n= 1382  share=100.0%  delta= +0.0pp
+  corners  base 65.1% (n=1182)
+      DF0: -
+      DF1: -
+      DF2: 65.1%  n= 1182  share=85.5%  delta= +0.0pp
+  3way     base 94.3% (n=1382)
+      DF0: -
+      DF1: -
+      DF2: 94.3%  n= 1382  share=100.0%  delta= +0.0pp

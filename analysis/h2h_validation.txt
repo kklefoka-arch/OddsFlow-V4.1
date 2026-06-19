@@ -1,0 +1,92 @@
+H2H-CORNERS VALIDATION — 2026-06-18 18:28 UTC
+population: 28,847 classifiable settled fixtures
+
+=== strong:over   (cell N = 2982) ===
+  goals    base 71.7% (n=2982)
+      bandA: over=72%(n780,26%,-0)  under=72%(n906,30%,+0)  none=72%(n1296,43%,-0)
+      bandB: high=72%(n780,26%,-0)  low=70%(n183,6%,-2)  neutral=73%(n723,24%,+1)  none=72%(n1296,43%,-0)
+  corners  base 69.8% (n=2325)
+      bandA: over=71%(n774,26%,+1)  under=70%(n901,30%,+0)  none=68%(n650,22%,-2)
+      bandB: high=71%(n774,26%,+1)  low=72%(n181,6%,+3)  neutral=69%(n720,24%,-0)  none=68%(n650,22%,-2)
+  3way     base 69.4% (n=2982)
+      bandA: over=72%(n780,26%,+2)  under=69%(n906,30%,-1)  none=68%(n1296,43%,-1)
+      bandB: high=72%(n780,26%,+2)  low=71%(n183,6%,+2)  neutral=68%(n723,24%,-1)  none=68%(n1296,43%,-1)
+
+=== strong:under   (cell N = 4829) ===
+  goals    base 66.8% (n=4829)
+      bandA: over=66%(n911,19%,-0)  under=65%(n1260,26%,-1)  none=68%(n2658,55%,+1)
+      bandB: high=66%(n911,19%,-0)  low=67%(n264,5%,-0)  neutral=65%(n996,21%,-2)  none=68%(n2658,55%,+1)
+  corners  base 67.7% (n=3274)
+      bandA: over=67%(n908,19%,-1)  under=67%(n1256,26%,-1)  none=69%(n1110,23%,+2)
+      bandB: high=67%(n908,19%,-1)  low=64%(n263,5%,-3)  neutral=68%(n993,21%,+0)  none=69%(n1110,23%,+2)
+  3way     base 74.3% (n=4829)
+      bandA: over=75%(n911,19%,+0)  under=75%(n1260,26%,+1)  none=74%(n2658,55%,-0)
+      bandB: high=75%(n911,19%,+0)  low=76%(n264,5%,+1)  neutral=75%(n996,21%,+0)  none=74%(n2658,55%,-0)
+
+=== standard:over   (cell N = 11108) ===
+  goals    base 77.3% (n=11108)
+      bandA: over=77%(n3149,28%,+0)  under=78%(n2834,26%,+1)  none=77%(n5125,46%,-0)
+      bandB: high=77%(n3149,28%,+0)  low=77%(n510,5%,+0)  neutral=78%(n2324,21%,+1)  none=77%(n5125,46%,-0)
+  corners  base 64.0% (n=8504)
+      bandA: over=64%(n3141,28%,+0)  under=63%(n2820,25%,-1)  none=65%(n2543,23%,+1)
+      bandB: high=64%(n3141,28%,+0)  low=60%(n506,5%,-4)  neutral=63%(n2314,21%,-1)  none=65%(n2543,23%,+1)
+  3way     base 72.6% (n=11108)
+      bandA: over=72%(n3149,28%,-0)  under=73%(n2834,26%,-0)  none=73%(n5125,46%,+0)
+      bandB: high=72%(n3149,28%,-0)  low=71%(n510,5%,-2)  neutral=73%(n2324,21%,+0)  none=73%(n5125,46%,+0)
+
+=== standard:under   (cell N = 2073) ===
+  goals    base 71.7% (n=2073)
+      bandA: over=72%(n435,21%,+0)  under=70%(n516,25%,-2)  none=73%(n1122,54%,+1)
+      bandB: high=72%(n435,21%,+0)  low=69%(n108,5%,-3)  neutral=70%(n408,20%,-2)  none=73%(n1122,54%,+1)
+  corners  base 56.5% (n=1424)
+      bandA: over=61%(n435,21%,+4)  under=55%(n515,25%,-1)  none=54%(n474,23%,-3)
+      bandB: high=61%(n435,21%,+4)  low=50%(n108,5%,-7)  neutral=57%(n407,20%,+0)  none=54%(n474,23%,-3)
+  3way     base 81.5% (n=2073)
+      bandA: over=81%(n435,21%,-0)  under=82%(n516,25%,+1)  none=81%(n1122,54%,-0)
+      bandB: high=81%(n435,21%,-0)  low=79%(n108,5%,-3)  neutral=83%(n408,20%,+1)  none=81%(n1122,54%,-0)
+
+=== low:over   (cell N = 3201) ===
+  goals    base 80.9% (n=3201)
+      bandA: over=82%(n1119,35%,+1)  under=81%(n917,29%,+0)  none=80%(n1165,36%,-1)
+      bandB: high=82%(n1119,35%,+1)  low=85%(n150,5%,+4)  neutral=81%(n767,24%,-0)  none=80%(n1165,36%,-1)
+  corners  base 66.4% (n=2792)
+      bandA: over=67%(n1115,35%,+1)  under=66%(n912,28%,-1)  none=66%(n765,24%,-0)
+      bandB: high=67%(n1115,35%,+1)  low=61%(n150,5%,-6)  neutral=67%(n762,24%,+0)  none=66%(n765,24%,-0)
+  3way     base 79.9% (n=3201)
+      bandA: over=78%(n1119,35%,-2)  under=81%(n917,29%,+1)  none=81%(n1165,36%,+1)
+      bandB: high=78%(n1119,35%,-2)  low=89%(n150,5%,+9)  neutral=79%(n767,24%,-1)  none=81%(n1165,36%,+1)
+
+=== low:under   (cell N = 805) ===
+  goals    base 71.2% (n=805)
+      bandA: over=68%(n182,23%,-4)  under=77%(n201,25%,+5)  none=70%(n422,52%,-1)
+      bandB: high=68%(n182,23%,-4)  low=71%(n38,5%,-0)  neutral=78%(n163,20%,+7)  none=70%(n422,52%,-1)
+  corners  base 55.5% (n=568)
+      bandA: over=55%(n182,23%,+0)  under=54%(n201,25%,-1)  none=57%(n185,23%,+1)
+      bandB: high=55%(n182,23%,+0)  low=58%(n38,5%,+2)  neutral=53%(n163,20%,-2)  none=57%(n185,23%,+1)
+  3way     base 88.4% (n=805)
+      bandA: over=88%(n182,23%,+0)  under=89%(n201,25%,+1)  none=88%(n422,52%,-0)
+      bandB: high=88%(n182,23%,+0)  low=84%(n38,5%,-4)  neutral=90%(n163,20%,+2)  none=88%(n422,52%,-0)
+
+=== one_sided:over   (cell N = 2467) ===
+  goals    base 84.4% (n=2467)
+      bandA: over=84%(n960,39%,-0)  under=85%(n770,31%,+0)  none=84%(n737,30%,-0)
+      bandB: high=84%(n960,39%,-0)  low=82%(n136,6%,-3)  neutral=85%(n634,26%,+1)  none=84%(n737,30%,-0)
+  corners  base 69.0% (n=2313)
+      bandA: over=69%(n954,39%,-0)  under=68%(n770,31%,-1)  none=70%(n589,24%,+1)
+      bandB: high=69%(n954,39%,-0)  low=73%(n136,6%,+4)  neutral=67%(n634,26%,-2)  none=70%(n589,24%,+1)
+  3way     base 88.2% (n=2467)
+      bandA: over=89%(n960,39%,+1)  under=87%(n770,31%,-1)  none=89%(n737,30%,+0)
+      bandB: high=89%(n960,39%,+1)  low=87%(n136,6%,-1)  neutral=87%(n634,26%,-1)  none=89%(n737,30%,+0)
+
+=== one_sided:under   (cell N = 1382) ===
+  goals    base 82.1% (n=1382)
+      bandA: over=83%(n439,32%,+1)  under=82%(n428,31%,-0)  none=81%(n515,37%,-1)
+      bandB: high=83%(n439,32%,+1)  low=74%(n82,6%,-8)  neutral=84%(n346,25%,+2)  none=81%(n515,37%,-1)
+  corners  base 65.1% (n=1182)
+      bandA: over=66%(n439,32%,+1)  under=65%(n423,31%,-0)  none=64%(n320,23%,-1)
+      bandB: high=66%(n439,32%,+1)  low=61%(n82,6%,-4)  neutral=66%(n341,25%,+1)  none=64%(n320,23%,-1)
+  3way     base 94.3% (n=1382)
+      bandA: over=95%(n439,32%,+1)  under=93%(n428,31%,-1)  none=94%(n515,37%,-0)
+      bandB: high=95%(n439,32%,+1)  low=93%(n82,6%,-2)  neutral=93%(n346,25%,-1)  none=94%(n515,37%,-0)
+
+legend: arm=hit%(n=N, share-of-cell, delta-vs-base pp)  * = thin (<30)

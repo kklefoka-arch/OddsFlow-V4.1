@@ -1,0 +1,3 @@
+STATUS OK - got response
+b'{"data":[{"id":19670645,"sport_id":1,"league_id":2545,"season_id":27571,"stage_id":77480579,"group_id":null,"aggregate_id":null,"round_id":402244,"state_id":5,"venue_id":339092,"name":"The Town FC vs '
+Exitcode: 0 

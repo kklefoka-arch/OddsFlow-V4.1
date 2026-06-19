@@ -1,6 +1,12 @@
 # OddsFlow V4 — Operator Manual
 
-**Operator:** Katlego (KK) | **Port:** 8083 | **Updated:** 2026-06-09
+**Operator:** Katlego (KK) | **Port:** 8083 | **Updated:** 2026-06-19
+
+> **Companion document:** `TAB_REFERENCE.md` describes every tab in full — what each
+> panel shows, how the number is computed, and exactly which endpoint + code function
+> feeds it. Use it to check the app against its documentation: if a tab shows something
+> that doesn't match `TAB_REFERENCE.md`, you can point to the precise endpoint/function
+> and I can review the code against the doc.
 
 ---
 
@@ -436,6 +442,52 @@ delete `index.lock`) and retry.
 
 ---
 
-*Last updated 2026-06-09 (Session 20): fetch_results runbook threshold 8h→18h;
-livescores 403 fix; leagues 29→28 + DB-driven active set; added Runbook
-reference (§8), Troubleshooting (§9), and Glossary (§10).*
+## 11. Session 24 alignment (2026-06-19) — what changed and why
+
+This session removed the last places where the displayed numbers disagreed with
+the live v4 engine. Four backend changes, all deploy on the next **admin reboot**
+(the running server is elevated; a non-admin restart can't replace it):
+
+**1. Live, growing baseline (`app/engine/live_baseline.py`).** The Picks tab used
+to show frozen baseline hit-rates from `static_policy.V3_MARKETS` (e.g. a fixed
+83.8% / n=10,996). It now reads `live_cell_hit()` — the per-cell hit rate computed
+from **every settled, classifiable fixture**, recomputed every 30 minutes. The
+picture **grows** as new fixtures settle instead of being pinned to the foundation
+test. If a cell has fewer than 50 settled fixtures it falls back to the frozen
+number so a thin cell never shows a wild rate. The goals-override (the old
+hard-coded strong-spread lift) is retired — the live baseline already reflects it.
+
+**2. Corner denominator fix (`app/engine/promotion.py`).** Corners are only
+gradeable on fixtures where corner stats exist, but the Analysis matrix was
+dividing corner greens by **all** fixtures (like goals), which dragged the corner
+rate down to ~49% against a real ~64%. Corners now divide by `cn_n` (fixtures with
+corner data) and the matrix reports `n_corners` separately from `n_fixtures`.
+
+**3. Reports are v4-only (`app/api/routes_reports.py`).** Every report query now
+filters `em.market IN ('goals_nl','corners_nl','threeway')`, so legacy `dnb` /
+`alpha_win` rows from before v4 no longer inflate or distort the counts. Reports
+count what the engine actually fires today.
+
+**4. Multi-market drift (`app/api/routes_inspector.py`).** The Inspector drift
+table compared **everything** against the threeway rate. It now computes drift
+**per cell × market** — goals_nl, corners_nl and threeway each compared against
+**their own** baseline (live baseline preferred, frozen fallback). The table gained
+a Market column; the Stats-tab drift summary keys on `zone:bts:market`.
+
+Plus the earlier fix recorded in CLAUDE.md: the odds parser was reading the wrong
+Sportmonks markets (goals on a thin market with no 1.5 line, corners on odd/even).
+Correct markets are **goals = market_id 80**, **corners = market_id 67**;
+`scripts/rederive_odds.py` re-derives them from `raw_odds_json`. This only ever
+affected *displayed odds* and the cross-signal — hit rates settle on the score and
+corner count, so they were never wrong.
+
+**Deploy note.** Frontend changes (engine.js) are live on a browser reload.
+Backend changes (the four above) only take effect after the server process is
+replaced — reboot from an admin session, or run `restart_server2.bat` elevated.
+
+---
+
+*Last updated 2026-06-19 (Session 24): live growing baseline; corner-denominator
+fix; v4-only reports; multi-market drift; odds market-id correction. Added §11 and
+the companion TAB_REFERENCE.md. Prior — 2026-06-09 (Session 20): runbook threshold
+8h→18h; livescores 403 fix; leagues 29→28 + DB-driven active set; §8–§10 added.*

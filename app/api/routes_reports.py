@@ -56,7 +56,7 @@ def emit_performance(
             JOIN fixtures f ON f.id = em.fixture_id
             LEFT JOIN fixture_stats fs ON fs.fixture_id = f.id
             LEFT JOIN leagues lg ON lg.id = f.league_id
-            WHERE em.emitted_at >= ?{tier_clause}
+            WHERE em.emitted_at >= ? AND em.market IN ('goals_nl','corners_nl','threeway'){tier_clause}
             """,
             [cutoff_180.strftime("%Y-%m-%d %H:%M:%S"), *tier_params],
         ).fetchall()
@@ -170,7 +170,7 @@ def emit_recent(
             LEFT JOIN leagues lg ON lg.id = f.league_id
             LEFT JOIN teams th ON th.id = f.home_team_id
             LEFT JOIN teams ta ON ta.id = f.away_team_id
-            WHERE em.emitted_at >= ?{tier_clause}
+            WHERE em.emitted_at >= ? AND em.market IN ('goals_nl','corners_nl','threeway'){tier_clause}
             ORDER BY f.date DESC, em.emitted_at DESC
             """,
             [cutoff.strftime("%Y-%m-%d %H:%M:%S"), *tier_params],
@@ -355,7 +355,7 @@ def emit_market_breakdown(
             JOIN fixtures f ON f.id = em.fixture_id
             LEFT JOIN fixture_stats fs ON fs.fixture_id = f.id
             LEFT JOIN leagues lg ON lg.id = f.league_id
-            WHERE em.emitted_at >= ?{tier_clause}
+            WHERE em.emitted_at >= ? AND em.market IN ('goals_nl','corners_nl','threeway'){tier_clause}
             """,
             [cutoff.strftime("%Y-%m-%d %H:%M:%S"), *tier_params],
         ).fetchall()
@@ -369,7 +369,7 @@ def emit_market_breakdown(
             JOIN fixtures f ON f.id = em.fixture_id
             LEFT JOIN pick_results pr ON pr.pick_uuid = em.pick_uuid
             LEFT JOIN leagues lg ON lg.id = f.league_id
-            WHERE em.emitted_at >= ?{tier_clause}
+            WHERE em.emitted_at >= ? AND em.market IN ('goals_nl','corners_nl','threeway'){tier_clause}
               AND pr.pick_uuid IS NULL
             GROUP BY em.market, state
             """,
@@ -402,7 +402,8 @@ def emit_market_breakdown(
             LEFT JOIN pick_results pr ON pr.pick_uuid = em.pick_uuid
             LEFT JOIN leagues lg ON lg.id = f.league_id
             WHERE f.date >= datetime('now','-7 days')
-              AND f.date <  datetime('now'){tier_clause}
+              AND f.date <  datetime('now')
+              AND em.market IN ('goals_nl','corners_nl','threeway'){tier_clause}
             GROUP BY em.market, window, state
             """,
             [*tier_params],

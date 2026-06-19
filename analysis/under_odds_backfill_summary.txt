@@ -1,0 +1,18 @@
+UNDER-ODDS BACKFILL — 2026-06-18 16:44 UTC
+columns added this run: ['goals_under_15_odd', 'goals_under_25_odd', 'goals_under_35_odd', 'corners_under_75_odd', 'corners_under_85_odd', 'corners_under_95_odd']
+fixtures with raw_odds_json: 3858
+fixtures with >=1 under price filled: 321  (8.3%)
+unparseable raw_odds_json: 0
+per-column fill counts:
+  goals_under_15_odd             0  (0.0%)
+  goals_under_25_odd           290  (7.5%)
+  goals_under_35_odd           131  (3.4%)
+  corners_under_75_odd           0  (0.0%)
+  corners_under_85_odd           0  (0.0%)
+  corners_under_95_odd           0  (0.0%)
+sanity sample (over vs under should be inverse-ish):
+  fx 19701677: G2.5 over=1.92 under=1.99 | C8.5 over=None under=None
+  fx 19701678: G2.5 over=1.87 under=2.05 | C8.5 over=None under=None
+  fx 19701679: G2.5 over=2.16 under=1.74 | C8.5 over=None under=None
+  fx 19701680: G2.5 over=1.65 under=2.21 | C8.5 over=None under=None
+  fx 19701681: G2.5 over=2.2 under=1.67 | C8.5 over=None under=None

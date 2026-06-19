@@ -11,7 +11,8 @@ from fastapi import APIRouter, Query
 from app.api.routes_picks import settle_pick, is_hit
 from app.db.database import get_conn
 from app.engine.classify import zone_of, bts_yesno
-from app.engine.static_policy import PROMOTED_CELLS
+from app.engine.live_baseline import live_cell_hit
+from app.engine.static_policy import PROMOTED_CELLS, V3_MARKETS, MARKET_KEYS
 from app.settings import settings
 
 router = APIRouter(prefix="/inspector", tags=["inspector"])
@@ -93,13 +94,18 @@ def compute_drift_rows(
     ).fetchall()
 
     now_utc = datetime.now(tz=timezone.utc)
-    # Per-cell -> {window_days: {hits, n}}. 2-key (zone, bts) — df is a signal.
-    per_cell: dict[tuple[str, str], dict[int, dict[str, int]]] = {}
+    # Per (zone, bts, market) -> {window_days: {hits, n}}. Multi-market drift:
+    # each of the 3 v4 markets (goals_nl / corners_nl / threeway) is compared
+    # against its OWN historical baseline — not the threeway rate for all.
+    per_cell: dict[tuple[str, str, str], dict[int, dict[str, int]]] = {}
     for r in recent_rows:
-        key = (r["zone"], r["bts_pocket"])
-        if key not in live_promoted:
+        market = r["market"]
+        if market not in MARKET_KEYS:
+            continue  # v4-only: drop legacy dnb / alpha_win rows
+        key = (r["zone"], r["bts_pocket"], market)
+        if (r["zone"], r["bts_pocket"]) not in live_promoted:
             continue
-        h = is_hit(settle_pick(r["market"], r["home_score"], r["away_score"],
+        h = is_hit(settle_pick(market, r["home_score"], r["away_score"],
                                 r["home_odd"], r["away_odd"], r["pick"],
                                 total_corners=r["total_corners"]))
         if h is None:
@@ -119,40 +125,52 @@ def compute_drift_rows(
 
     rows: list[dict[str, Any]] = []
     for (zone, bts), cell in sorted(live_promoted.items()):
-        hist_pct = cell["threeway_hit"]
-        hist_n = cell.get("n_fixtures", cell.get("n", 0))
-        windows_for_cell = per_cell.get((zone, bts), {})
-        # Smallest window meeting min_sample_n; fall back to base window.
-        chosen_window = recent_days
-        chosen_data = windows_for_cell.get(recent_days, {"hits": 0, "n": 0})
-        if chosen_data["n"] < min_sample_n:
-            for w in expanded_windows:
-                d = windows_for_cell.get(w, {"hits": 0, "n": 0})
-                if d["n"] >= min_sample_n:
-                    chosen_window = w
-                    chosen_data = d
-                    break
-            else:
-                # None hit min_sample_n — return the longest window's data
-                # rather than zeros so the operator can still see the count.
-                chosen_window = longest
-                chosen_data = windows_for_cell.get(longest, {"hits": 0, "n": 0})
-        r_n = chosen_data["n"]
-        r_hit = round(chosen_data["hits"] / r_n * 100, 1) if r_n > 0 else None
-        gap_pp = round(r_hit - hist_pct, 1) if r_hit is not None else None
-        flag = _drift_flag(gap_pp, r_n, min_sample_n)
-        rows.append({
-            "zone":           zone,
-            "bts_v2":         bts,
-            "partition_key":  f"{zone}:{bts}",
-            "historical_n":   hist_n,
-            "historical_hit": hist_pct,
-            "recent_n":       r_n,
-            "recent_hit":     r_hit,
-            "window_days":    chosen_window,
-            "gap_pp":         gap_pp,
-            "flag":           flag,
-        })
+        cell_def = V3_MARKETS.get((zone, bts), {})
+        for market in MARKET_KEYS:
+            mkt_def = cell_def.get(market, {})
+            # Historical baseline: prefer the LIVE growing baseline, fall back
+            # to the frozen V3_MARKETS constant so drift never reads stale.
+            hist_pct = mkt_def.get("hit")
+            hist_n = mkt_def.get("n", 0)
+            try:
+                live = live_cell_hit(settings.sqlite_path, zone, bts, market)
+                if live is not None:
+                    hist_pct, hist_n = live
+            except Exception:
+                pass
+            if hist_pct is None:
+                continue
+            windows_for_cell = per_cell.get((zone, bts, market), {})
+            # Smallest window meeting min_sample_n; fall back to base window.
+            chosen_window = recent_days
+            chosen_data = windows_for_cell.get(recent_days, {"hits": 0, "n": 0})
+            if chosen_data["n"] < min_sample_n:
+                for w in expanded_windows:
+                    d = windows_for_cell.get(w, {"hits": 0, "n": 0})
+                    if d["n"] >= min_sample_n:
+                        chosen_window = w
+                        chosen_data = d
+                        break
+                else:
+                    chosen_window = longest
+                    chosen_data = windows_for_cell.get(longest, {"hits": 0, "n": 0})
+            r_n = chosen_data["n"]
+            r_hit = round(chosen_data["hits"] / r_n * 100, 1) if r_n > 0 else None
+            gap_pp = round(r_hit - hist_pct, 1) if r_hit is not None else None
+            flag = _drift_flag(gap_pp, r_n, min_sample_n)
+            rows.append({
+                "zone":           zone,
+                "bts_v2":         bts,
+                "market":         market,
+                "partition_key":  f"{zone}:{bts}:{market}",
+                "historical_n":   hist_n,
+                "historical_hit": round(hist_pct, 1),
+                "recent_n":       r_n,
+                "recent_hit":     r_hit,
+                "window_days":    chosen_window,
+                "gap_pp":         gap_pp,
+                "flag":           flag,
+            })
     return rows
 
 
