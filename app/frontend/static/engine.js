@@ -1578,7 +1578,7 @@ async function loadPicksLog() {
       if (!byFix.has(p.fixture_id)) byFix.set(p.fixture_id, { info: p, legs: {} });
       byFix.get(p.fixture_id).legs[p.market] = p;
     }
-    const kdt = s => (s || '').replace('T', ' ').slice(0, 16);
+    const kdt = s => { const dt = parseKickoffUtc(s); return dt ? dt.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : (s || '—'); };
     const lad = (ln) => `O${ln.toFixed(1)} · O${(ln + 1).toFixed(1)} · O${(ln + 2).toFixed(1)}`;
     let shown = 0;
     const blocks = [];

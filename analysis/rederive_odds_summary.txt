@@ -1,19 +1,19 @@
-RE-DERIVE ODDS (goals mkt80, corners mkt67) — 2026-06-19 12:16 UTC
+RE-DERIVE ODDS (goals mkt80, corners mkt67) — 2026-06-21 10:38 UTC
 fixtures with raw_odds_json: 3858
 
 per-column fill counts:
-  goals_over_15_odd            272  (7.1%)
-  goals_over_25_odd            331  (8.6%)
-  goals_over_35_odd            274  (7.1%)
-  goals_under_15_odd           272  (7.1%)
-  goals_under_25_odd           331  (8.6%)
-  goals_under_35_odd           274  (7.1%)
-  corners_over_75_odd          180  (4.7%)
-  corners_over_85_odd          196  (5.1%)
-  corners_over_95_odd          201  (5.2%)
-  corners_under_75_odd         180  (4.7%)
-  corners_under_85_odd         196  (5.1%)
-  corners_under_95_odd         201  (5.2%)
+  goals_over_15_odd            293  (7.6%)
+  goals_over_25_odd            349  (9.0%)
+  goals_over_35_odd            293  (7.6%)
+  goals_under_15_odd           293  (7.6%)
+  goals_under_25_odd           349  (9.0%)
+  goals_under_35_odd           293  (7.6%)
+  corners_over_75_odd          190  (4.9%)
+  corners_over_85_odd          210  (5.4%)
+  corners_over_95_odd          216  (5.6%)
+  corners_under_75_odd         190  (4.9%)
+  corners_under_85_odd         210  (5.4%)
+  corners_under_95_odd         216  (5.6%)
 
 sample:
   fx 18845193: G1.5 over=1.21  G2.5 over=1.68/under=None  C8.5 over=1.27/under=None

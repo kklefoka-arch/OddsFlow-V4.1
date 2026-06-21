@@ -129,24 +129,27 @@ if not upcoming:
 sm_ids = [int(r["sportmonks_id"]) for r in upcoming]
 sm_to_db = {int(r["sportmonks_id"]): r["id"] for r in upcoming}
 
-# Batch by chunks of 50 sportmonks_ids (multi endpoint limit)
+# Fetch per-fixture via fixtures/{id} — the multi endpoint poisons the WHOLE
+# chunk if any single id is unsubscribed (Sportmonks behaviour). fetch_results.py
+# was rewritten for the same reason; mirror it here so one bad id can't zero out
+# the whole refresh (was: errors=117/117 every run, which blocked the re-emit chain).
 updated = 0
 errors = 0
-for i in range(0, len(sm_ids), 50):
-    chunk = sm_ids[i:i + 50]
-    csv = ",".join(str(x) for x in chunk)
-    try:
-        data = api_get(f"fixtures/multi/{csv}", {"include": "odds"})
-    except Exception as e:
-        print(f"  API error on chunk {i}: {e}")
-        errors += len(chunk)
+for sm in sm_ids:
+    db_id = sm_to_db.get(int(sm))
+    if db_id is None:
         continue
-    items = data.get("data", []) or []
-    for fx in items:
-        sm = fx.get("id")
-        db_id = sm_to_db.get(int(sm)) if sm is not None else None
-        if db_id is None:
-            continue
+    try:
+        data = api_get(f"fixtures/{sm}", {"include": "odds"})
+    except Exception as e:
+        print(f"  API error on fixture {sm}: {e}")
+        errors += 1
+        continue
+    fx = data.get("data") or {}
+    if not fx:
+        errors += 1
+        continue
+    if True:
         (ho, do, ao, by, bn,
          g15, g25, g35, c85) = extract_odds(fx.get("odds") or [])
         # Reclassify draw_zone/bts_pocket so stored cell stays current after
