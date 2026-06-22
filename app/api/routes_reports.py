@@ -11,11 +11,82 @@ from typing import Any
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
-from app.api.routes_picks import settle_pick
+from app.api.routes_picks import settle_pick, is_hit
 from app.db.database import get_conn
 from app.settings import settings
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+# ---------------------------------------------------------------------------
+# GET /reports/market_tier_matrix
+#   markets (threeway / goals_nl / corners_nl) x tiers (T1 / T2 / T3).
+#   Each cell = hit rate as fraction (wins/settled) + percentage. v4-only,
+#   on-the-fly settled from fixture scores so it always matches the engine.
+# ---------------------------------------------------------------------------
+
+@router.get("/market_tier_matrix")
+def market_tier_matrix() -> dict[str, Any]:
+    markets = ("threeway", "goals_nl", "corners_nl")
+    conn = get_conn(settings.sqlite_path)
+    try:
+        rows = conn.execute(
+            """
+            SELECT em.market, lg.tier AS tier, em.pick,
+                   f.home_score, f.away_score, f.home_odd, f.away_odd,
+                   fs.total_corners
+            FROM emit_log em
+            JOIN fixtures f  ON f.id = em.fixture_id
+            LEFT JOIN leagues lg ON lg.id = f.league_id
+            LEFT JOIN fixture_stats fs ON fs.fixture_id = f.id
+            WHERE em.market IN ('threeway','goals_nl','corners_nl')
+              AND f.home_score IS NOT NULL AND f.away_score IS NOT NULL
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    # acc[(tier, market)] = [wins, settled]
+    acc: dict[tuple[int, str], list[int]] = {}
+    for r in rows:
+        tier = r["tier"]
+        if tier not in (1, 2, 3):
+            continue
+        h = is_hit(settle_pick(r["market"], r["home_score"], r["away_score"],
+                               r["home_odd"], r["away_odd"], r["pick"],
+                               total_corners=r["total_corners"]))
+        if h is None:
+            continue
+        slot = acc.setdefault((tier, r["market"]), [0, 0])
+        slot[0] += h
+        slot[1] += 1
+
+    def cell(tier: int, market: str) -> dict[str, Any]:
+        w, n = acc.get((tier, market), [0, 0])
+        return {"wins": w, "settled": n,
+                "pct": round(100 * w / n, 1) if n else None}
+
+    matrix = {f"T{t}": {m: cell(t, m) for m in markets} for t in (1, 2, 3)}
+    # column + row totals
+    totals_by_market = {}
+    for m in markets:
+        w = sum(acc.get((t, m), [0, 0])[0] for t in (1, 2, 3))
+        n = sum(acc.get((t, m), [0, 0])[1] for t in (1, 2, 3))
+        totals_by_market[m] = {"wins": w, "settled": n,
+                               "pct": round(100 * w / n, 1) if n else None}
+    totals_by_tier = {}
+    for t in (1, 2, 3):
+        w = sum(acc.get((t, m), [0, 0])[0] for m in markets)
+        n = sum(acc.get((t, m), [0, 0])[1] for m in markets)
+        totals_by_tier[f"T{t}"] = {"wins": w, "settled": n,
+                                   "pct": round(100 * w / n, 1) if n else None}
+    return {
+        "markets": list(markets),
+        "matrix": matrix,
+        "totals_by_market": totals_by_market,
+        "totals_by_tier": totals_by_tier,
+        "as_of": datetime.now(tz=timezone.utc).isoformat(),
+    }
 
 
 def _tier_where_clause(tier: str | None) -> tuple[str, list]:

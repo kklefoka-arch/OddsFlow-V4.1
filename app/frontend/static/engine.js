@@ -743,11 +743,42 @@ async function loadReports() {
   const tierSel = document.getElementById('reports-tier');
   const tier = tierSel ? tierSel.value : '';
   await Promise.all([
+    loadReportsMarketTierMatrix(),
     loadReportsSettleActivity(days),
     loadReportsEmitPerformance(tier),
     loadReportsEmitMarketBreakdown(days, tier),   // also drives markets-summary, zone-market, pending
     loadReportsEmitRecent(days, tier),
   ]);
+}
+
+// Market (cols) x Tier (rows) hit-rate matrix — fraction + %.
+async function loadReportsMarketTierMatrix() {
+  const el = document.getElementById('reports-market-tier-matrix');
+  if (!el) return;
+  el.innerHTML = '<div class="muted">Loading…</div>';
+  try {
+    const body = await (await fetch('/reports/market_tier_matrix')).json();
+    const labels = { threeway: '3-Way', goals_nl: 'Goals', corners_nl: 'Corners' };
+    const mkts = body.markets || ['threeway', 'goals_nl', 'corners_nl'];
+    const fmtCell = c => {
+      if (!c || !c.settled) return '<span class="muted">—</span>';
+      const cls = c.pct >= 72 ? 'positive' : (c.pct < 60 ? 'negative' : '');
+      return `<strong>${c.wins}/${c.settled}</strong><br><span class="${cls}">${c.pct}%</span>`;
+    };
+    const rows = ['T1', 'T2', 'T3'].map(t => {
+      const r = body.matrix[t] || {};
+      const tot = (body.totals_by_tier || {})[t];
+      return `<tr><td><strong>${t}</strong></td>${mkts.map(m => `<td class="numeric">${fmtCell(r[m])}</td>`).join('')}<td class="numeric">${fmtCell(tot)}</td></tr>`;
+    }).join('');
+    const totRow = `<tr><td><strong>ALL</strong></td>${mkts.map(m => `<td class="numeric">${fmtCell((body.totals_by_market || {})[m])}</td>`).join('')}<td class="numeric"></td></tr>`;
+    el.innerHTML = `
+      <table>
+        <thead><tr><th>Tier</th>${mkts.map(m => `<th class="numeric">${labels[m] || m}</th>`).join('')}<th class="numeric">All markets</th></tr></thead>
+        <tbody>${rows}${totRow}</tbody>
+      </table>`;
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Error: ${e}</div>`;
+  }
 }
 
 function renderMarketsSummary(rows) {
