@@ -328,11 +328,12 @@ function renderPicksList(el, picks) {
     if (!byFixture.has(p.fixture_id)) byFixture.set(p.fixture_id, []);
     byFixture.get(p.fixture_id).push(p);
   }
-  const fixtureCards = Array.from(byFixture.values())
-    .sort((a, b) => (a[0].kickoff_utc || '').localeCompare(b[0].kickoff_utc || ''))
-    .map(picks => renderFixtureCard(picks))
-    .join('');
-  el.innerHTML = fixtureCards;
+  const fixtureGroups = Array.from(byFixture.values())
+    .sort((a, b) => (a[0].kickoff_utc || '').localeCompare(b[0].kickoff_utc || ''));
+  // Stash the full ordered set so the Inspector can step between fixtures
+  // (Prev/Next + jump) instead of forcing a trip back to the Picks tab.
+  _inspectorFixtures = fixtureGroups;
+  el.innerHTML = fixtureGroups.map(picks => renderFixtureCard(picks)).join('');
   el.querySelectorAll('.card').forEach(c => {
     c.addEventListener('click', () => openInspector(JSON.parse(c.dataset.picks)));
   });
@@ -744,11 +745,40 @@ async function loadReports() {
   const tier = tierSel ? tierSel.value : '';
   await Promise.all([
     loadReportsMarketTierMatrix(),
+    loadReportsSignalPerformance(),
     loadReportsSettleActivity(days),
     loadReportsEmitPerformance(tier),
     loadReportsEmitMarketBreakdown(days, tier),   // also drives markets-summary, zone-market, pending
     loadReportsEmitRecent(days, tier),
   ]);
+}
+
+// Signal performance — how spread & DF are doing, per market.
+async function loadReportsSignalPerformance() {
+  const el = document.getElementById('reports-signal-performance');
+  if (!el) return;
+  el.innerHTML = '<div class="muted">Loading…</div>';
+  try {
+    const body = await (await fetch('/reports/signal_performance')).json();
+    const labels = { threeway: '3-Way', goals_nl: 'Goals', corners_nl: 'Corners' };
+    const mkts = body.markets || ['threeway', 'goals_nl', 'corners_nl'];
+    const fmtCell = c => {
+      if (!c || !c.settled) return '<span class="muted">—</span>';
+      const cls = c.pct >= 72 ? 'positive' : (c.pct < 60 ? 'negative' : '');
+      return `<strong>${c.wins}/${c.settled}</strong> <span class="${cls}">${c.pct}%</span>`;
+    };
+    const tbl = (title, data, rowKeys) => `
+      <h4 style="margin:8px 0 4px">${title}</h4>
+      <table>
+        <thead><tr><th>${title.includes('Spread') ? 'Spread' : 'DF'}</th>${mkts.map(m => `<th class="numeric">${labels[m] || m}</th>`).join('')}</tr></thead>
+        <tbody>${rowKeys.map(k => `<tr><td><strong>${k}</strong></td>${mkts.map(m => `<td class="numeric">${fmtCell((data[k] || {})[m])}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>`;
+    el.innerHTML =
+      tbl('Spread signal (BTS)', body.spread || {}, ['strong', 'slight']) +
+      tbl('DF signal (draw favouritism)', body.df || {}, ['DF0', 'DF1', 'DF2']);
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Error: ${e}</div>`;
+  }
 }
 
 // Market (cols) x Tier (rows) hit-rate matrix — fraction + %.
@@ -1167,14 +1197,47 @@ function renderEmitRecentFixtureCard(fx) {
   `;
 }
 
-// ---- Inspector single-fixture ----
+// ---- Inspector single-fixture (with Prev/Next navigation across fixtures) ----
+let _inspectorFixtures = [];   // ordered fixture pick-groups, set by renderPicks
+let _inspectorIndex = 0;
+
 function openInspector(picks) {
   const list = Array.isArray(picks) ? picks : [picks];
   if (list.length === 0) return;
-  const p0 = list[0];
   document.querySelector('[data-tab="inspector"]').click();
+  // Locate the clicked fixture inside the full ordered set so Prev/Next works.
+  const fid = list[0].fixture_id;
+  let idx = _inspectorFixtures.findIndex(g => g[0] && g[0].fixture_id === fid);
+  if (idx < 0) { _inspectorFixtures = [list]; idx = 0; }   // fallback: lone fixture
+  renderInspectorFixture(idx);
+}
+
+function stepInspector(delta) {
+  const n = _inspectorFixtures.length;
+  if (!n) return;
+  renderInspectorFixture((_inspectorIndex + delta + n) % n);
+}
+
+function renderInspectorFixture(idx) {
+  _inspectorIndex = idx;
+  const list = _inspectorFixtures[idx] || [];
+  if (list.length === 0) return;
+  const p0 = list[0];
   const c = document.getElementById('inspector-selected');
   if (!c) return;
+  const total = _inspectorFixtures.length;
+
+  // Navigator strip — Prev / "i of N" / Next + a jump dropdown of every fixture.
+  const options = _inspectorFixtures.map((g, i) =>
+    `<option value="${i}" ${i === idx ? 'selected' : ''}>${i + 1}. ${(g[0].home_team || '?')} vs ${(g[0].away_team || '?')}</option>`
+  ).join('');
+  const navHtml = `
+    <div class="insp-nav" style="display:flex;gap:8px;align-items:center;margin:4px 0 10px;flex-wrap:wrap">
+      <button id="insp-prev" class="btn-subtab">◀ Prev</button>
+      <span class="chip">${idx + 1} of ${total}</span>
+      <button id="insp-next" class="btn-subtab">Next ▶</button>
+      <select id="insp-jump" style="max-width:340px">${options}</select>
+    </div>`;
 
   const dt = parseKickoffUtc(p0.kickoff_utc);
   const tierBadge = p0.tier
@@ -1210,7 +1273,8 @@ function openInspector(picks) {
     }).join('');
 
   c.innerHTML = `
-    <h3 class="section-h">Selected fixture (clicked from Picks)</h3>
+    <h3 class="section-h">Selected fixture <span class="muted" style="font-size:0.8em">— step through with Prev / Next</span></h3>
+    ${navHtml}
     <div class="card" style="cursor: default;">
       <div class="card-header">
         <span>${p0.league || '—'} ${p0.country ? `· ${p0.country}` : ''} ${tierBadge}</span>
@@ -1239,6 +1303,15 @@ function openInspector(picks) {
       if (zone && bts) loadInspectorSimilar(zone, bts, null);
     }
   }
+
+  // Wire the navigator: Prev/Next step, dropdown jumps, keep selection in view.
+  const prev = document.getElementById('insp-prev');
+  const next = document.getElementById('insp-next');
+  const jump = document.getElementById('insp-jump');
+  if (prev) prev.addEventListener('click', () => stepInspector(-1));
+  if (next) next.addEventListener('click', () => stepInspector(1));
+  if (jump) jump.addEventListener('change', e => renderInspectorFixture(Number(e.target.value)));
+  c.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // Bundle 5 (Session 23d) — runbook strip on Today tab.
@@ -1701,6 +1774,16 @@ document.querySelectorAll('.btn-subtab').forEach(btn => {
 document.getElementById('upcoming-refresh').addEventListener('click', loadUpcoming);
 document.getElementById('inspector-refresh').addEventListener('click', loadInspector);
 document.getElementById('inspector-days').addEventListener('change', loadInspector);
+// Arrow-key fixture stepping while the Inspector tab is active (ignored when typing in a field).
+document.addEventListener('keydown', e => {
+  const insp = document.getElementById('inspector');
+  if (!insp || !insp.classList.contains('active')) return;
+  if (!_inspectorFixtures.length) return;
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+  if (e.key === 'ArrowLeft')  { stepInspector(-1); e.preventDefault(); }
+  if (e.key === 'ArrowRight') { stepInspector(1);  e.preventDefault(); }
+});
 document.getElementById('reports-refresh').addEventListener('click', loadReports);
 document.getElementById('reports-days').addEventListener('change', loadReports);
 document.getElementById('reports-tier').addEventListener('change', loadReports);

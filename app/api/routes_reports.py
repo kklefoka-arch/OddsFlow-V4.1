@@ -12,6 +12,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
 from app.api.routes_picks import settle_pick, is_hit
+from app.engine.classify import bts_spread
 from app.db.database import get_conn
 from app.settings import settings
 
@@ -85,6 +86,63 @@ def market_tier_matrix() -> dict[str, Any]:
         "matrix": matrix,
         "totals_by_market": totals_by_market,
         "totals_by_tier": totals_by_tier,
+        "as_of": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /reports/signal_performance
+#   How the qualifying SIGNALS are actually performing, per market:
+#     - BTS spread (strong vs slight)
+#     - DF level (DF0 / DF1 / DF2)
+#   v4-only, on-the-fly settled. Spread is recomputed from the frozen BTS odds;
+#   DF is read from emit_log.df_level. Each cell = wins / settled + hit %.
+# ---------------------------------------------------------------------------
+
+@router.get("/signal_performance")
+def signal_performance() -> dict[str, Any]:
+    markets = ("threeway", "goals_nl", "corners_nl")
+    conn = get_conn(settings.sqlite_path)
+    try:
+        rows = conn.execute(
+            """
+            SELECT em.market, em.df_level AS df, em.pick,
+                   f.home_score, f.away_score, f.home_odd, f.away_odd,
+                   f.btts_yes_odd AS y, f.btts_no_odd AS n, fs.total_corners
+            FROM emit_log em
+            JOIN fixtures f ON f.id = em.fixture_id
+            LEFT JOIN fixture_stats fs ON fs.fixture_id = f.id
+            WHERE em.market IN ('threeway','goals_nl','corners_nl')
+              AND f.home_score IS NOT NULL AND f.away_score IS NOT NULL
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    spread: dict[tuple[str, str], list[int]] = {}
+    df: dict[tuple[str, str], list[int]] = {}
+    for r in rows:
+        h = is_hit(settle_pick(r["market"], r["home_score"], r["away_score"],
+                               r["home_odd"], r["away_odd"], r["pick"],
+                               total_corners=r["total_corners"]))
+        if h is None:
+            continue
+        sp = bts_spread(r["y"], r["n"])
+        if sp in ("strong", "slight"):
+            s = spread.setdefault((sp, r["market"]), [0, 0]); s[0] += h; s[1] += 1
+        if r["df"] in ("DF0", "DF1", "DF2"):
+            s = df.setdefault((r["df"], r["market"]), [0, 0]); s[0] += h; s[1] += 1
+
+    def cell(d, key):
+        w, n = d.get(key, [0, 0])
+        return {"wins": w, "settled": n, "pct": round(100 * w / n, 1) if n else None}
+
+    return {
+        "markets": list(markets),
+        "spread": {lvl: {m: cell(spread, (lvl, m)) for m in markets}
+                   for lvl in ("strong", "slight")},
+        "df": {lvl: {m: cell(df, (lvl, m)) for m in markets}
+               for lvl in ("DF0", "DF1", "DF2")},
         "as_of": datetime.now(tz=timezone.utc).isoformat(),
     }
 
