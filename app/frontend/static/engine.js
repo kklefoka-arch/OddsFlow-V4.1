@@ -760,6 +760,10 @@ async function loadReportsSignalPerformance() {
   el.innerHTML = '<div class="muted">Loading…</div>';
   try {
     const body = await (await fetch('/reports/signal_performance')).json();
+    if (!body || !body.spread) {
+      el.innerHTML = '<div class="empty">Signal-performance endpoint not loaded yet — restart the server (restart_server2) to activate it.</div>';
+      return;
+    }
     const labels = { threeway: '3-Way', goals_nl: 'Goals', corners_nl: 'Corners' };
     const mkts = body.markets || ['threeway', 'goals_nl', 'corners_nl'];
     const fmtCell = c => {
@@ -788,6 +792,10 @@ async function loadReportsMarketTierMatrix() {
   el.innerHTML = '<div class="muted">Loading…</div>';
   try {
     const body = await (await fetch('/reports/market_tier_matrix')).json();
+    if (!body || !body.matrix) {
+      el.innerHTML = '<div class="empty">Matrix endpoint not loaded yet — restart the server (restart_server2) to activate it.</div>';
+      return;
+    }
     const labels = { threeway: '3-Way', goals_nl: 'Goals', corners_nl: 'Corners' };
     const mkts = body.markets || ['threeway', 'goals_nl', 'corners_nl'];
     const fmtCell = c => {

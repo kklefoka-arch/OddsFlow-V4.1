@@ -44,8 +44,36 @@ def fetch_subscribed_leagues() -> list[dict]:
 
 
 def main():
-    leagues = fetch_subscribed_leagues()
+    # SAFETY (API-downtime hardening): never let a failed or degraded API
+    # response wipe the active-league set. A lapsed subscription can return a
+    # network/HTTP error OR a 200 with an empty/partial list — either way we
+    # must NOT run "UPDATE leagues SET active = 0" against nothing, or the whole
+    # engine goes dark and stays dark. On any such case we leave leagues.active
+    # exactly as it is and exit cleanly so the scheduler logs a skip, not a wipe.
+    try:
+        leagues = fetch_subscribed_leagues()
+    except Exception as e:
+        print(f"sync_leagues: API call failed ({e}). "
+              f"Preserving existing leagues.active — NO changes made.")
+        return
     sub_ids = {int(l["id"]) for l in leagues}
+    if not sub_ids:
+        print("sync_leagues: API returned 0 leagues (subscription off or degraded). "
+              "Preserving existing leagues.active — NO changes made.")
+        return
+    # Guard against a drastic, suspicious drop (e.g. partial outage returning a
+    # handful of leagues): if the new set is <50% of the current active count,
+    # skip rather than gut the plan. Re-run manually once the plan is confirmed.
+    try:
+        _c = sqlite3.connect(DB, timeout=30)
+        _cur = _c.execute("SELECT COUNT(*) FROM leagues WHERE active=1").fetchone()[0]
+        _c.close()
+    except Exception:
+        _cur = 0
+    if _cur >= 10 and len(sub_ids) < _cur * 0.5:
+        print(f"sync_leagues: API returned {len(sub_ids)} leagues vs {_cur} currently active "
+              f"(>50% drop). Suspicious — preserving existing set. Re-run manually to confirm.")
+        return
     print(f"Sportmonks subscription returns {len(leagues)} leagues:\n")
     for l in sorted(leagues, key=lambda x: (((x.get('country') or {}).get('name') or ''), x.get('name') or '')):
         country = (l.get("country") or {}).get("name", "?")

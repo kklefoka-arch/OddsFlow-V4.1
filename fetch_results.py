@@ -159,6 +159,30 @@ def main() -> None:
         print("Nothing to fetch — run again after match days.")
         return
 
+    # API-downtime guard: probe once before processing. If the API is
+    # unreachable (e.g. the subscription has lapsed), skip the ENTIRE run so we
+    # never mark perfectly-reachable fixtures 'no_result' (which would ORPHAN
+    # their picks and corrupt the hit-rate record). Requires non-empty data so a
+    # 200-with-empty-body lapse also counts as down. Resumes automatically when
+    # the API is back — nothing is lost, the fixtures stay unsettled and queued.
+    try:
+        _probe = api_get("leagues", {"per_page": 1})
+        _api_ok = bool(_probe and _probe.get("data"))
+    except Exception as _e:
+        _api_ok = False
+        print(f"  api probe error: {_e}")
+    if not _api_ok:
+        print("API unreachable (subscription off?) — skipping run; "
+              "no fixtures fetched or aged to no_result.")
+        try:
+            conn.execute("INSERT INTO system_health (metric, value) VALUES (?, ?)",
+                         ("fetch_results", "skip: api_unreachable (no aging while API down)"))
+            conn.commit()
+        except Exception:
+            pass
+        conn.close()
+        return
+
     updated = inserted_stats = not_finished = no_data = giveup = 0
     # per-league tally: name -> [settled, no_data]
     by_league: dict[str, list[int]] = {}
